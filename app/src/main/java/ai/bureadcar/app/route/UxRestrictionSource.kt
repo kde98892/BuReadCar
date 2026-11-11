@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /** What the platform currently forbids. Apply this, not speed, per the Pleos driving guide. */
-data class UxLimits(val setupBlocked: Boolean = false, val limitText: Boolean = false)
+data class UxLimits(val setupBlocked: Boolean = true, val limitText: Boolean = true)
 
 class UxRestrictionSource(context: Context) {
     private val _limits = MutableStateFlow(UxLimits())
