@@ -8,8 +8,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.temporal.IsoFields
-import org.json.JSONArray
-import org.json.JSONObject
 
 /** Fetches one category's news. Regional providers return one segment per region with news. */
 interface NewsProvider {
@@ -25,9 +23,9 @@ data class RegionNews(val region: Region?, val text: String, val isSample: Boole
 private const val RTMS = "https://apis.data.go.kr/1613000"
 private val YM: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMM")
 
-private fun rtmsUrl(service: String, operation: String, region: Region, month: YearMonth) =
+private fun rtmsUrl(service: String, operation: String, region: Region, month: YearMonth, page: Int) =
     "$RTMS/$service/$operation?serviceKey=${BuildConfig.DATA_GO_KR_API_KEY}" +
-        "&LAWD_CD=${region.lawdCode}&DEAL_YMD=${month.format(YM)}&pageNo=1&numOfRows=1000"
+        "&LAWD_CD=${region.lawdCode}&DEAL_YMD=${month.format(YM)}&pageNo=$page&numOfRows=1000"
 
 /** Latest of the last two complete months that has rows; this month is still being reported. */
 private suspend fun latestRows(
@@ -50,7 +48,9 @@ class TradeProvider : NewsProvider {
 
     override suspend fun fetch(regions: List<Region>, today: LocalDate) = regions.mapNotNull { region ->
         val (month, rows) = latestRows(today) { m ->
-            parseRtmsItems(httpGet(rtmsUrl("RTMSDataSvcAptTradeDev", "getRTMSDataSvcAptTradeDev", region, m)))
+            collectApiPages(1000) { page ->
+                parseRtmsPage(httpGet(rtmsUrl("RTMSDataSvcAptTradeDev", "getRTMSDataSvcAptTradeDev", region, m, page)))
+            }
         } ?: return@mapNotNull null
         Scripts.trade(region, month.monthValue, rows)?.let { RegionNews(region, it) }
     }
@@ -63,7 +63,9 @@ class RentProvider : NewsProvider {
 
     override suspend fun fetch(regions: List<Region>, today: LocalDate) = regions.mapNotNull { region ->
         val (month, rows) = latestRows(today) { m ->
-            parseRtmsItems(httpGet(rtmsUrl("RTMSDataSvcAptRent", "getRTMSDataSvcAptRent", region, m)))
+            collectApiPages(1000) { page ->
+                parseRtmsPage(httpGet(rtmsUrl("RTMSDataSvcAptRent", "getRTMSDataSvcAptRent", region, m, page)))
+            }
         } ?: return@mapNotNull null
         Scripts.rent(region, month.monthValue, rows)?.let { RegionNews(region, it) }
     }
@@ -106,16 +108,17 @@ class SubscriptionProvider : NewsProvider {
             val end = it.receiptEnd ?: return@filter false
             end.isBefore(today) && !end.isBefore(today.minusDays(30))
         }.maxByOrNull { it.receiptEnd!! } ?: return null
-        val url = "$base/ApplyhomeInfoCmpetRtSvc/v1/getAPTLttotPblancCmpet?page=1&perPage=100" +
+        val url = "$base/ApplyhomeInfoCmpetRtSvc/v1/getAPTLttotPblancCmpet?perPage=100" +
             "&${encode("cond[HOUSE_MANAGE_NO::EQ]")}=${closed.manageNo}&serviceKey=${BuildConfig.DATA_GO_KR_API_KEY}"
-        val rate = Scripts.highestRate(jsonRows(httpGet(url))) ?: return null
+        val rows = collectApiPages(100) { page -> parseOdcloudPage(httpGet("$url&page=$page")) }
+        val rate = Scripts.highestRate(rows) ?: return null
         return Scripts.competition(closed, rate)
     }
 
     private suspend fun loadNotices(sido: String): List<Scripts.Notice> {
-        val url = "$base/ApplyhomeInfoDetailSvc/v1/getAPTLttotPblancDetail?page=1&perPage=200" +
+        val url = "$base/ApplyhomeInfoDetailSvc/v1/getAPTLttotPblancDetail?perPage=200" +
             "&${encode("cond[SUBSCRPT_AREA_CODE_NM::EQ]")}=${encode(sido)}&serviceKey=${BuildConfig.DATA_GO_KR_API_KEY}"
-        return jsonRows(httpGet(url)).map { row ->
+        return collectApiPages(200) { page -> parseOdcloudPage(httpGet("$url&page=$page")) }.map { row ->
             Scripts.Notice(
                 manageNo = row["HOUSE_MANAGE_NO"]?.toString().orEmpty(),
                 name = row["HOUSE_NM"]?.toString().orEmpty(),
@@ -130,13 +133,7 @@ class SubscriptionProvider : NewsProvider {
 
     private fun dateOrNull(text: String) = runCatching { LocalDate.parse(text) }.getOrNull()
 
-    private fun jsonRows(json: String): List<Map<String, Any?>> {
-        val data = JSONObject(json).optJSONArray("data") ?: JSONArray()
-        return List(data.length()) { i ->
-            val row = data.getJSONObject(i)
-            row.keys().asSequence().associateWith { key -> row.opt(key).takeUnless { it == JSONObject.NULL } }
-        }
-    }
+
 }
 
 class PriceIndexProvider : NewsProvider {
@@ -159,7 +156,7 @@ class PriceIndexProvider : NewsProvider {
 
     private suspend fun loadClasses(): List<Pair<Int, String>> {
         val url = "$base/SttsApiTblItm.do?KEY=${BuildConfig.RONE_API_KEY}&Type=json&pIndex=1&pSize=1000&STATBL_ID=$table"
-        return rows(httpGet(url), "SttsApiTblItm")
+        return parseRoneRows(httpGet(url), "SttsApiTblItm")
             .filter { it.optString("ITM_TAG") == "분류" }
             .map { it.getInt("ITM_ID") to it.getString("ITM_FULLNM") }
     }
@@ -168,7 +165,7 @@ class PriceIndexProvider : NewsProvider {
         val url = "$base/SttsApiTblData.do?KEY=${BuildConfig.RONE_API_KEY}&Type=json&pIndex=1&pSize=20" +
             "&STATBL_ID=$table&DTACYCLE_CD=WK&CLS_ID=$classId&ITM_ID=10001" +
             "&START_WRTTIME=${weekId(today.minusWeeks(8))}&END_WRTTIME=${weekId(today)}"
-        return rows(httpGet(url), "SttsApiTblData").map {
+        return parseRoneRows(httpGet(url), "SttsApiTblData").map {
             Scripts.IndexPoint(LocalDate.parse(it.getString("WRTTIME_DESC")), it.getDouble("DTA_VAL"))
         }
     }
@@ -179,11 +176,7 @@ class PriceIndexProvider : NewsProvider {
         return "%d%02d".format(year, week)
     }
 
-    private fun rows(json: String, name: String): List<JSONObject> {
-        val root = JSONObject(json).optJSONArray(name) ?: return emptyList()
-        val array = root.optJSONObject(1)?.optJSONArray("row") ?: return emptyList()
-        return List(array.length()) { array.getJSONObject(it) }
-    }
+
 }
 
 class RateProvider : NewsProvider {
@@ -201,7 +194,7 @@ class RateProvider : NewsProvider {
             Triple("722Y001", "0101000", "한국은행 기준금리는"),
             Triple("121Y006", "BECBLA0302", "은행 주택담보대출 신규 금리는"),
         ).mapNotNull { (table, item, label) ->
-            val rows = rows(httpGet("$base/$table/$range/$item")).sortedBy { it.first }
+            val rows = parseEcosRows(httpGet("$base/$table/$range/$item")).sortedBy { it.first }
             val month = rows.lastOrNull()?.first ?: return@mapNotNull null
             Scripts.rate(label, spokenMonth(month), rows.map { it.second })
         }
@@ -210,12 +203,7 @@ class RateProvider : NewsProvider {
 
     private fun spokenMonth(yyyymm: String) = "${yyyymm.take(4)}년 ${yyyymm.drop(4).toInt()}월"
 
-    private fun rows(json: String): List<Pair<String, Double>> {
-        val array = JSONObject(json).optJSONObject("StatisticSearch")?.optJSONArray("row") ?: return emptyList()
-        return List(array.length()) { array.getJSONObject(it) }.mapNotNull { row ->
-            row.optString("DATA_VALUE").toDoubleOrNull()?.let { row.getString("TIME") to it }
-        }
-    }
+
 }
 
 /** Placeholder for categories without a live source yet. Never sounds like real news. */
@@ -257,7 +245,7 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
         categories.forEachIndexed { index, category ->
             val provider = providers.getValue(category)
             add(Segment(category.label, "오늘은 $dayName ${category.label} 소식입니다."))
-            val result = runCatching { provider.fetch(regions, today) }
+            val result = apiResult { provider.fetch(regions, today) }
             result.onSuccess { news ->
                 if (news.isEmpty()) add(Segment(category.label, "이번 주 새 소식이 없습니다."))
                 news.forEach { add(toSegment(category, it, priorities)) }
@@ -275,7 +263,7 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
     /** News for a district entered mid-drive; regional categories only. */
     suspend fun forPassing(categories: List<Category>, region: Region, today: LocalDate): List<Segment> =
         categories.mapNotNull { providers[it]?.takeIf { p -> p.regional } }.flatMap { provider ->
-            runCatching { provider.fetch(listOf(region), today) }.getOrDefault(emptyList()).map { news ->
+            apiResult { provider.fetch(listOf(region), today) }.getOrDefault(emptyList()).map { news ->
                 Segment(
                     provider.category.label,
                     "지금 지나는 ${region.sigungu} 소식입니다. ${news.text}",

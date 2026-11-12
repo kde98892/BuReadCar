@@ -68,6 +68,10 @@ internal fun NowPlaying(
             CircleIconButton(Icons.Rounded.Close, "끝내기", 72.dp, Veil, Color.White) { viewModel.stop() }
         }
 
+        player.message?.let {
+            Text(it, color = Color.White, fontSize = 22.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+
         val headline: @Composable (Modifier) -> Unit = { modifier ->
             Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
                 category?.let { Icon(it.icon, null, Modifier.size(88.dp), tint = Color.White) }

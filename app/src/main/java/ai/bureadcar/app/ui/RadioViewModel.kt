@@ -3,6 +3,7 @@ package ai.bureadcar.app.ui
 import ai.bureadcar.app.briefing.BriefingPlan
 import ai.bureadcar.app.data.BriefingBuilder
 import ai.bureadcar.app.data.VWorldGeocoder
+import ai.bureadcar.app.data.apiResult
 import ai.bureadcar.app.data.allProviders
 import ai.bureadcar.app.model.Category
 import ai.bureadcar.app.model.ListenMode
@@ -11,6 +12,7 @@ import ai.bureadcar.app.model.Region
 import ai.bureadcar.app.model.SavedRoute
 import ai.bureadcar.app.player.BriefingPlayer
 import ai.bureadcar.app.player.PleosSpeaker
+import ai.bureadcar.app.route.AudioPowerSource
 import ai.bureadcar.app.route.DEMO_ROUTE
 import ai.bureadcar.app.route.NaviSource
 import ai.bureadcar.app.route.UxRestrictionSource
@@ -65,6 +67,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     private val builder = BriefingBuilder(allProviders())
     private val speaker = PleosSpeaker(app)
     val player = BriefingPlayer(app, speaker)
+    private val audioPower = AudioPowerSource(app, player::setAudioPowerEnabled)
     val ttsReady: StateFlow<Boolean?> = speaker.ready
     val limits = ux.limits
 
@@ -127,8 +130,10 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     private fun launchBriefing(only: Category?, demo: Boolean) {
         briefingJob?.cancel()
         trackingJob?.cancel()
+        player.pause()
         briefingJob = viewModelScope.launch {
             _ui.update { it.copy(preparing = true, status = "경로 지역과 소식을 준비하고 있어요", regions = emptyList()) }
+            if (!_ui.value.consent) return@launch fail("위치 정보 이용에 동의한 후 시작해 주세요")
             val today = LocalDate.now()
             val categories = todayCategories(only, demo, today.dayOfWeek)
             val trip = if (demo) Trip(DEMO_ROUTE.first().let { listOf(it, DEMO_ROUTE.last()) }, null) else resolveTrip()
@@ -172,7 +177,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun regionOrNull(place: Place): Region? =
-        runCatching { geocoder.region(place) }.getOrNull()
+        apiResult { geocoder.region(place) }.getOrNull()
 
     private fun track(demo: Boolean, categories: List<Category>, known: Set<String>, today: LocalDate) {
         trackingJob = viewModelScope.launch {
@@ -249,6 +254,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        audioPower.release()
         player.release()
         navi.release()
         ux.release()
