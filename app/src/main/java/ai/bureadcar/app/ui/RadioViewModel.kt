@@ -12,6 +12,7 @@ import ai.bureadcar.app.model.Region
 import ai.bureadcar.app.model.SavedRoute
 import ai.bureadcar.app.player.BriefingPlayer
 import ai.bureadcar.app.player.PleosSpeaker
+import ai.bureadcar.app.route.AudioPowerSource
 import ai.bureadcar.app.route.DEMO_ROUTE
 import ai.bureadcar.app.route.NaviSource
 import ai.bureadcar.app.route.UxRestrictionSource
@@ -66,6 +67,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     private val builder = BriefingBuilder(allProviders())
     private val speaker = PleosSpeaker(app)
     val player = BriefingPlayer(app, speaker)
+    private val audioPower = AudioPowerSource(app, player::setAudioPowerEnabled)
     val ttsReady: StateFlow<Boolean?> = speaker.ready
     val limits = ux.limits
 
@@ -252,6 +254,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        audioPower.release()
         player.release()
         navi.release()
         ux.release()

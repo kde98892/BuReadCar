@@ -119,6 +119,8 @@ data class PlayerState(
 /** Android focus is kept behind an interface so loss/denial can be tested without a car. */
 interface AudioFocus {
     var onLost: () -> Unit
+    var onTransientLoss: () -> Unit
+    var onGain: () -> Unit
     val otherAudioActive: Boolean
     fun request(): Boolean
     fun abandon()
@@ -127,6 +129,8 @@ interface AudioFocus {
 class AndroidAudioFocus(context: Context) : AudioFocus {
     private val audio = context.getSystemService(AudioManager::class.java)
     override var onLost: () -> Unit = {}
+    override var onTransientLoss: () -> Unit = {}
+    override var onGain: () -> Unit = {}
     override val otherAudioActive: Boolean get() = audio.isMusicActive
     private val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
         .setAudioAttributes(
@@ -138,10 +142,12 @@ class AndroidAudioFocus(context: Context) : AudioFocus {
         )
         .setWillPauseWhenDucked(true)
         .setOnAudioFocusChangeListener({ change ->
-            if (change == AudioManager.AUDIOFOCUS_LOSS ||
-                change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
-                change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) onLost()
-            // Do not restart or request focus automatically on gain.
+            when (change) {
+                AudioManager.AUDIOFOCUS_GAIN -> onGain()
+                AudioManager.AUDIOFOCUS_LOSS -> onLost()
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> onTransientLoss()
+            }
         }, Handler(Looper.getMainLooper()))
         .build()
 
@@ -151,7 +157,7 @@ class AndroidAudioFocus(context: Context) : AudioFocus {
     override fun abandon() { audio.abandonAudioFocusRequest(request) }
 }
 
-/** Stops on focus loss and resumes only after an explicit user action. */
+/** Temporary interruptions resume on gain; power restoration requests fresh focus. */
 class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus) {
     constructor(context: Context, engine: Speaker) : this(engine, AndroidAudioFocus(context))
 
@@ -163,12 +169,63 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
     private var hasFocus = false
     private var generation = 0L
     private var message: String? = null
+    private var resumeOnGain = false
+    private var resumeAfterPower = false
+    private var audioPowerEnabled = true
+    private var released = false
 
     init {
         focus.onLost = {
+            val powerResume = !audioPowerEnabled && resumeAfterPower
             pause()
+            resumeAfterPower = powerResume
             message = "다른 소리가 우선 재생되어 멈췄어요. 끝나면 재생을 눌러 주세요"
             publish()
+        }
+        focus.onTransientLoss = {
+            if (playing || resumeOnGain) {
+                resumeOnGain = true
+                hasFocus = false
+                stopSpeech()
+                message = "다른 소리 안내가 끝나면 이어 읽을게요"
+                publish()
+            }
+        }
+        focus.onGain = {
+            if (resumeOnGain && audioPowerEnabled && !released) {
+                resumeOnGain = false
+                hasFocus = true
+                // The system returned the existing focus; do not request it again.
+                if (engine.ready.value == true) {
+                    message = null
+                    playing = true
+                    speakCurrent()
+                } else {
+                    pause()
+                    message = "음성 엔진이 준비되지 않았어요. 재생을 눌러 다시 시도해 주세요"
+                    publish()
+                }
+            }
+        }
+    }
+
+    /** Audio-off policy or screen-off is a power interruption, not a navigation prompt. */
+    fun setAudioPowerEnabled(enabled: Boolean) {
+        if (released || audioPowerEnabled == enabled) return
+        audioPowerEnabled = enabled
+        if (!enabled) {
+            val shouldResume = playing || resumeOnGain
+            pause()
+            resumeAfterPower = shouldResume
+            message = "절전 중에는 재생을 멈춰요"
+            publish()
+        } else {
+            val shouldResume = resumeAfterPower
+            resumeAfterPower = false
+            message = null
+            publish()
+            // play() reevaluates engine readiness, other audio, and a new focus request.
+            if (shouldResume) play()
         }
     }
 
@@ -181,8 +238,10 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
     }
 
     fun play() {
-        if (playing || queue.currentSegment == null) return
+        if (released || playing || queue.currentSegment == null) return
+        if (resumeOnGain) return // Wait for the system; never steal focus back from a prompt.
         message = when {
+            !audioPowerEnabled -> "절전 중에는 재생할 수 없어요"
             engine.ready.value != true -> "음성 엔진이 준비되지 않았어요. 잠시 후 다시 시도해 주세요"
             !hasFocus && runCatching { focus.otherAudioActive }.getOrDefault(true) -> "다른 오디오가 재생 중이에요. 일시정지한 뒤 재생해 주세요"
             else -> null
@@ -200,6 +259,8 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
     }
 
     fun pause() {
+        resumeOnGain = false
+        resumeAfterPower = false
         stopSpeech()
         hasFocus = false
         runCatching { focus.abandon() }
@@ -221,7 +282,7 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
     }
 
     fun restart() {
-        stopSpeech()
+        pause()
         queue.restart()
         publish()
         play()
@@ -238,9 +299,14 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
     }
 
     fun release() {
+        released = true
+        resumeOnGain = false
+        resumeAfterPower = false
         stopSpeech()
         hasFocus = false
         focus.onLost = {}
+        focus.onTransientLoss = {}
+        focus.onGain = {}
         runCatching { focus.abandon() }
         engine.release()
     }
@@ -278,6 +344,8 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
     private fun end() {
         finishing = false
         playing = false
+        resumeOnGain = false
+        resumeAfterPower = false
         generation++
         hasFocus = false
         engine.stop()
