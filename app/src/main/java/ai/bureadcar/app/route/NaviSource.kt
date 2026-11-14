@@ -136,6 +136,27 @@ fun distanceMeters(a: Place, b: Place): Double {
     return 2 * earth * asin(sqrt(h))
 }
 
+/**
+ * Points along straight lines between [stops], about 3 km apart and at most 12, ending at the last stop.
+ * The demo drives through them so a real route's districts are passed while the car stands still.
+ */
+fun simulatedDrive(stops: List<Place>): List<Place> {
+    val legs = stops.zipWithNext()
+    val total = legs.sumOf { (a, b) -> distanceMeters(a, b) }
+    if (total == 0.0) return stops.drop(1)
+    val spacing = maxOf(DEMO_SPACING_M, total / DEMO_MAX_POINTS)
+    return legs.flatMap { (a, b) ->
+        val steps = maxOf(1, Math.round(distanceMeters(a, b) / spacing).toInt())
+        (1..steps).map { i ->
+            val t = i.toDouble() / steps
+            if (i == steps) b else Place(a.name, a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t)
+        }
+    }
+}
+
+private const val DEMO_SPACING_M = 3_000.0
+private const val DEMO_MAX_POINTS = 12
+
 /** Scripted commute for the emulator, whose location never moves. */
 val DEMO_ROUTE = listOf(
     Place("분당구 정자동", 37.3825, 127.1086),

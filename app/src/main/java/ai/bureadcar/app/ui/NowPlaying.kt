@@ -97,8 +97,9 @@ internal fun NowPlaying(
                                 Icon(PleosIcons.lock, null, Modifier.size(32.dp), tint = c.sub)
                                 Text("주행 중에는 소리로만 들려드려요", style = PleosType.BodyMStrong, color = c.sub)
                             }
-                        } else if (player.text.isNotEmpty()) {
-                            Text(player.text, style = PleosType.BodyL, color = c.sub, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        } else if (player.sentence.isNotEmpty()) {
+                            // One sentence at a time follows the voice and stays within three lines, so nothing is cut.
+                            Text(player.sentence, style = PleosType.BodyL, color = c.sub)
                         }
                         DataBadge(!player.isSample)
                     }

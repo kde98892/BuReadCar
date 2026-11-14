@@ -1,5 +1,6 @@
 package ai.bureadcar.app.player
 
+import ai.bureadcar.app.briefing.BriefingPlan
 import ai.bureadcar.app.briefing.PlaybackQueue
 import ai.bureadcar.app.model.Segment
 import ai.pleos.playground.tts.TextToSpeech
@@ -107,6 +108,8 @@ data class PlayerState(
     val loaded: Boolean = false,
     val title: String = "",
     val text: String = "",
+    /** The sentence being spoken now; shown on screen instead of the whole segment. */
+    val sentence: String = "",
     val isSample: Boolean = false,
     val position: Int = 0,
     val total: Int = 0,
@@ -158,7 +161,12 @@ class AndroidAudioFocus(context: Context) : AudioFocus {
 }
 
 /** Temporary interruptions resume on gain; power restoration requests fresh focus. */
-class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus) {
+/** [later] runs a step after a delay; the pause between sentences goes through it. */
+class BriefingPlayer(
+    private val engine: Speaker,
+    private val focus: AudioFocus,
+    private val later: (Long, () -> Unit) -> Unit = { ms, step -> Handler(Looper.getMainLooper()).postDelayed(step, ms) },
+) {
     constructor(context: Context, engine: Speaker) : this(engine, AndroidAudioFocus(context))
 
     private val queue = PlaybackQueue()
@@ -319,7 +327,14 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
         val completed: () -> Unit = {
             if (token == generation && playing && hasFocus) {
                 if (finishing) end()
-                else if (queue.advanceSentence()) speakCurrent()
+                else if (queue.advanceSentence()) {
+                    // A short pause slows the broadcast to BriefingPlan.PACE; pausing or skipping meanwhile cancels it.
+                    later(BriefingPlan.pauseAfter(sentence)) {
+                        if (token == generation && playing) {
+                            if (finishing) end() else speakCurrent()
+                        }
+                    }
+                }
                 else end()
             }
         }
@@ -360,6 +375,7 @@ class BriefingPlayer(private val engine: Speaker, private val focus: AudioFocus)
             loaded = queue.size > 0,
             title = segment?.title.orEmpty(),
             text = segment?.text.orEmpty(),
+            sentence = queue.currentSentence.orEmpty(),
             isSample = segment?.isSample == true,
             position = queue.position,
             total = queue.size,

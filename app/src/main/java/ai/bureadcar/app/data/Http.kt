@@ -1,6 +1,7 @@
 package ai.bureadcar.app.data
 
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -38,6 +39,61 @@ suspend fun httpGet(url: String): String = withContext(Dispatchers.IO) {
         connection.disconnect()
     }
 }
+
+/**
+ * GET for sites that answer the first request with a cookie and a redirect to the same page
+ * (molit.go.kr does this before serving anything). Redirects are followed by hand to carry the cookie.
+ */
+suspend fun httpGetWithCookies(url: String): String =
+    httpWithCookies(url) { it.bufferedReader(Charsets.UTF_8).readText() }
+
+/** Like [httpGetWithCookies], handing the body stream to [read] instead of reading it as text. */
+suspend fun <T> httpWithCookies(url: String, read: (InputStream) -> T): T = withContext(Dispatchers.IO) {
+    val cookies = linkedMapOf<String, String>()
+    var target = url
+    repeat(MAX_REDIRECTS) {
+        currentCoroutineContext().ensureActive()
+        val connection = try {
+            (URL(target).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                connectTimeout = 10_000
+                readTimeout = 20_000
+                setRequestProperty("Accept", "*/*")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android)")
+                if (cookies.isNotEmpty()) {
+                    setRequestProperty("Cookie", cookies.entries.joinToString("; ") { "${it.key}=${it.value}" })
+                }
+            }
+        } catch (e: Exception) {
+            throw IOException("연결 실패")
+        }
+        try {
+            val code = try {
+                connection.responseCode
+            } catch (e: Exception) {
+                throw IOException("연결 실패")
+            }
+            connection.headerFields.filterKeys { it.equals("Set-Cookie", ignoreCase = true) }.values.flatten()
+                .forEach { header ->
+                    val pair = header.substringBefore(';').split('=', limit = 2)
+                    if (pair.size == 2) cookies[pair[0].trim()] = pair[1].trim()
+                }
+            when (code) {
+                200 -> return@withContext connection.inputStream.use(read)
+                in 300..399 -> {
+                    val location = connection.getHeaderField("Location") ?: throw IOException("HTTP $code")
+                    target = URL(URL(target), location).toString()
+                }
+                else -> throw IOException("HTTP $code")
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+    throw IOException("리다이렉트 반복")
+}
+
+private const val MAX_REDIRECTS = 5
 
 fun encode(text: String): String = URLEncoder.encode(text, "UTF-8")
 
