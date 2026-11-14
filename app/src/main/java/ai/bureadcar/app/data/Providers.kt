@@ -424,26 +424,38 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
 
     /** News for a district entered mid-drive; regional categories only. */
     suspend fun forPassing(categories: List<Category>, region: Region, today: LocalDate): List<Segment> = coroutineScope {
+        data class Part(val category: Category, val news: RegionNews?, val failed: Boolean = false)
+
         categories.mapNotNull { providers[it]?.takeIf { p -> p.regional } }
-            .map { provider -> async { provider to apiResult { provider.fetch(listOf(region), today) }.getOrDefault(emptyList()) } }
+            .map { provider -> async { provider to apiResult { provider.fetch(listOf(region), today) } } }
             .awaitAll()
-            // News without a district (province or nationwide stand-ins) was read at the start.
-            .map { (provider, items) -> provider.category to items.filter { it.region != null } }
-            .let { parts ->
-                if (parts.all { it.second.isEmpty() }) return@let emptyList()
-                parts.flatMap { (category, items) -> if (items.isEmpty()) listOf(category to null) else items.map { category to it as RegionNews? } }
+            .flatMap { (provider, result) ->
+                // Keep lookup failures distinct from successful lookups with no local news.
+                if (result.isFailure) {
+                    listOf(Part(provider.category, null, failed = true))
+                } else {
+                    // Province/nationwide stand-ins were already read at the start.
+                    val local = result.getOrThrow().filter { it.region != null }
+                    if (local.isEmpty()) listOf(Part(provider.category, null))
+                    else local.map { Part(provider.category, it) }
+                }
             }
             .let { here ->
-                // Read like the planned districts: one opening line, then 1부 and 2부 in turn.
-                here.mapIndexed { index, (category, news) ->
+                // Keep each district's programs together, including unavailable programs.
+                here.mapIndexed { index, (category, news, failed) ->
                     val lead = when {
                         here.size == 1 -> "지금 지나는 ${region.sigungu}의 ${category.label} 소식입니다."
                         index == 0 -> "지금 지나는 ${region.sigungu} 소식입니다. 먼저 ${category.label}입니다."
                         else -> "이어서 ${category.label}입니다."
                     }
+                    val text = when {
+                        failed -> "${region.sigungu}의 ${category.label} 소식을 불러오지 못해 건너뜁니다."
+                        news != null -> news.text
+                        else -> "${region.sigungu}에는 이번 주 새 소식이 없습니다."
+                    }
                     Segment(
                         category.label,
-                        "$lead ${news?.text ?: "${region.sigungu}에는 이번 주 새 소식이 없습니다."}",
+                        "$lead $text",
                         priority = Int.MAX_VALUE,
                         isSample = news?.isSample ?: false,
                         region = region.sigungu.substringAfterLast(" "),
