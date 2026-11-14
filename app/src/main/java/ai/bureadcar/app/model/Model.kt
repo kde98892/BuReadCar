@@ -39,7 +39,26 @@ sealed interface RouteBasis {
 data class Region(val lawdCode: String, val sido: String, val sigungu: String) {
     /** Name used for the subscription API's area filter. */
     val sidoShort: String get() = shortSido(sido)
+
+    /** Qualify districts in metropolitan cities without changing raw API matching fields. */
+    val displayName: String get() {
+        val district = sigungu.trim()
+        val city = sidoShort
+        if (district.isEmpty()) return city
+        if (city !in METROPOLITAN_CITIES) {
+            return district.replace(Regex("시(?=\\s+\\S+구$)"), "")
+        }
+        if (district == sido || district == city || district == "${city}시") return city
+        if (district.startsWith("$city ")) return district
+        if (district.startsWith("$sido ")) return "$city ${district.removePrefix("$sido ")}"
+        return "$city $district"
+    }
+
+    /** Screen labels retain the same city/district context as the spoken name. */
+    val shortDisplayName: String get() = displayName
 }
+
+private val METROPOLITAN_CITIES = setOf("서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종")
 
 /** One unit of playback: an intro, a region's news, or a closing line. */
 data class Segment(

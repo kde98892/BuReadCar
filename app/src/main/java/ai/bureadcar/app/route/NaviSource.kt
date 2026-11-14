@@ -6,6 +6,7 @@ import ai.pleos.playground.navi.data.BookmarkInfo
 import ai.pleos.playground.navi.data.CurrentLocationInfo
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
 import ai.pleos.playground.navi.data.DestinationInfo
+import ai.pleos.playground.navi.data.RecentDestinationInfo
 import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.WaypointInfo
 import ai.pleos.playground.navi.helper.NaviHelper
@@ -17,6 +18,9 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -39,6 +43,7 @@ class NaviSource(context: Context) {
     val location: StateFlow<Place?> = _location
     private val _destination = MutableStateFlow<DestinationInfo?>(null)
     private val _waypoints = MutableStateFlow<List<WaypointInfo>>(emptyList())
+    private val recentDestinations = MutableStateFlow<List<RecentDestinationInfo>?>(null)
     private val _bookmarks = MutableStateFlow(Bookmarks(null, null))
     val bookmarks: StateFlow<Bookmarks> = _bookmarks
     private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
@@ -55,6 +60,10 @@ class NaviSource(context: Context) {
 
         override fun onWayPointInfo(info: List<WaypointInfo>) {
             _waypoints.value = info
+        }
+
+        override fun onRecentDestinationInfo(info: List<RecentDestinationInfo>) {
+            recentDestinations.value = info.toList()
         }
 
         override fun onBookmarkInfo(info: List<BookmarkInfo>) {
@@ -106,14 +115,53 @@ class NaviSource(context: Context) {
             helper?.getWaypointInfo()
         }
         delay(SNAPSHOT_WAIT_MS)
+        val capturedWaypoints = _waypoints.value
+        val resolvedWaypoints = recoverWaypoints(capturedWaypoints)
         val destination = _destination.value?.takeIf { it.latitude != 0.0 || it.longitude != 0.0 }
         return NaviTrip(
             origin = _location.value,
-            waypoints = _waypoints.value.map { Place(it.name, it.latitude, it.longitude) },
+            waypoints = resolvedWaypoints,
             destination = destination?.let { Place(it.name, it.latitude, it.longitude) },
             remainSeconds = destination?.remainTime?.takeIf { it > 0 },
         )
     }
+
+    /** Restore missing coordinates only from a unique, exact SDK place identity. */
+    private suspend fun recoverWaypoints(points: List<WaypointInfo>): List<Place> {
+        val missing = points.filterNot { validCoordinates(it.latitude, it.longitude) }
+        if (missing.isEmpty()) return points.map { Place(it.name, it.latitude, it.longitude) }
+        val candidates = missing.filter { point ->
+            point.poiId.isNotBlank() && points.count { it.poiId == point.poiId } == 1
+        }
+        if (candidates.isEmpty()) {
+            return points.filter { validCoordinates(it.latitude, it.longitude) }
+                .map { Place(it.name, it.latitude, it.longitude) }
+        }
+        recentDestinations.value = null
+        val connectedHelper = helper
+        val requested = connectedHelper != null && runCatching {
+            connectedHelper.getRecentDestinationInfo()
+        }.isSuccess
+        val recent = if (requested) withTimeoutOrNull(RECENT_WAIT_MS) {
+            recentDestinations.filterNotNull().first()
+        } else null
+        return points.mapNotNull { point ->
+            if (validCoordinates(point.latitude, point.longitude)) {
+                return@mapNotNull Place(point.name, point.latitude, point.longitude)
+            }
+            if (point !in candidates) return@mapNotNull null
+            // Do not match by name, list order, or a guessed address.
+            val match = recent.orEmpty().filter {
+                it.poiId == point.poiId && it.poiProvider == point.poiProvider && it.poiSubId == point.poiSubId
+            }.singleOrNull()?.takeIf { validCoordinates(it.latitude, it.longitude) }
+            match?.let { Place(point.name, it.latitude, it.longitude) }
+        }
+
+    }
+
+    private fun validCoordinates(latitude: Double, longitude: Double): Boolean =
+        latitude.isFinite() && longitude.isFinite() && latitude in -90.0..90.0 &&
+            longitude in -180.0..180.0 && (latitude != 0.0 || longitude != 0.0)
 
     fun release() {
         runCatching {
@@ -124,6 +172,7 @@ class NaviSource(context: Context) {
 
     private companion object {
         const val SNAPSHOT_WAIT_MS = 1_200L
+        const val RECENT_WAIT_MS = 8_000L
     }
 }
 

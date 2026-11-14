@@ -66,7 +66,7 @@ object Scripts {
         val cancelled = rows.size - active(rows).size
         val direct = deals.count { it["dealingGbn"]?.trim() == "직거래" }
         return buildString {
-            append("${region.sigungu}의 ${month}월 아파트 매매는 지금까지 ${deals.size}건 신고됐습니다.")
+            append("${region.displayName}의 ${month}월 아파트 매매는 지금까지 ${deals.size}건 신고됐습니다.")
             if (direct > 0) append(" 이 가운데 중개를 거치지 않은 직거래는 ${direct}건입니다.")
             if (cancelled > 0) append(" 계약을 해제했다는 신고도 ${cancelled}건 있었습니다.")
             append(" 가장 높은 거래는 ${top.place()}")
@@ -91,10 +91,10 @@ object Scripts {
         previous: List<Map<String, String>> = emptyList(),
     ): String? {
         tradeChange(rows, previous)?.let {
-            return "${region.sigungu} 아파트의 ${month}월 제곱미터당 평균 거래가는 전월보다 ${Speech.change(it)}."
+            return "${region.displayName} 아파트의 ${month}월 제곱미터당 평균 거래가는 전월보다 ${Speech.change(it)}."
         }
         val top = active(rows).filter { it.amount() != null }.maxByOrNull { it.amount()!! } ?: return null
-        return "${region.sigungu}의 ${month}월 최고 거래는 ${Speech.name(top["aptNm"].orEmpty())} ${Speech.won(top.amount()!!)}입니다."
+        return "${region.displayName}의 ${month}월 최고 거래는 ${Speech.name(top["aptNm"].orEmpty())} ${Speech.won(top.amount()!!)}입니다."
     }
 
     private fun Map<String, String>.deposit() = Speech.parseAmount(get("deposit").orEmpty())
@@ -123,7 +123,7 @@ object Scripts {
         val jeonse = jeonse(rows)
         val wolse = rows.filter { it.monthly() > 0 && it.deposit() != null }
         return buildString {
-            append("${region.sigungu}의 ${month}월 아파트 전월세 계약은 지금까지 ${rows.size}건입니다. ")
+            append("${region.displayName}의 ${month}월 아파트 전월세 계약은 지금까지 ${rows.size}건입니다. ")
             append("전세 ${jeonse.size}건, 월세 ${rows.size - jeonse.size}건입니다.")
             val renewed = rows.filter { it["contractType"]?.trim() == "갱신" }
             if (renewed.isNotEmpty()) {
@@ -158,10 +158,10 @@ object Scripts {
     ): String? {
         if (rows.isEmpty()) return null
         jeonseChange(rows, previous)?.let {
-            return "${region.sigungu} 아파트의 ${month}월 전세 보증금은 제곱미터당 평균으로 전월보다 ${Speech.change(it)}."
+            return "${region.displayName} 아파트의 ${month}월 전세 보증금은 제곱미터당 평균으로 전월보다 ${Speech.change(it)}."
         }
         val jeonse = jeonse(rows).size
-        return "${region.sigungu}의 ${month}월 아파트 전월세 계약은 전세 ${jeonse}건, 월세 ${rows.size - jeonse}건입니다."
+        return "${region.displayName}의 ${month}월 아파트 전월세 계약은 전세 ${jeonse}건, 월세 ${rows.size - jeonse}건입니다."
     }
 
     /** One subscription notice. Schedule fields beyond the receipt window are read when present. */
