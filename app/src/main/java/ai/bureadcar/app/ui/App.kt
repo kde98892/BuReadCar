@@ -157,7 +157,7 @@ private fun Home(
                     if (ui.regions.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("오늘 경로", Modifier.align(Alignment.CenterVertically), style = PleosType.LabelMStrong, color = c.faint)
-                            ui.regions.map(::shortName).distinct().forEach { RegionChip(it) }
+                            ui.regions.distinct().forEach { RegionChip(it) }
                         }
                     }
                     PleosButton(

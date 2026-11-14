@@ -119,7 +119,7 @@ class SubscriptionProvider : NewsProvider {
             val local = notices.filter { Scripts.inRegion(it.address, region) }
             val (thisWeek, nextWeek) = Scripts.noticeWeeks(local, today).let { (a, b) -> withModels(a) to withModels(b) }
             Scripts.noticeNews("", thisWeek, nextWeek)?.let {
-                return@mapNotNull RegionNews(region, it, highlight = Scripts.noticeHighlight(region.sigungu, thisWeek, nextWeek))
+                return@mapNotNull RegionNews(region, it, highlight = Scripts.noticeHighlight(region.displayName, thisWeek, nextWeek))
             }
             competition(region, local, today)
         }
@@ -252,8 +252,8 @@ class PriceIndexProvider : NewsProvider {
                 val other = own[provinceId]?.await() ?: provinces[provinceId]?.await()
                 other?.let { name to it }
             }
-            Scripts.priceIndex(region.sigungu, points, wider)?.let {
-                RegionNews(region, it, highlight = Scripts.priceIndexHighlight(region.sigungu, points))
+            Scripts.priceIndex(region.displayName, points, wider)?.let {
+                RegionNews(region, it, highlight = Scripts.priceIndexHighlight(region.displayName, points))
             }
         }
     }
@@ -387,15 +387,15 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
                     val empty = regional.filter { results.getValue(it).isSuccess }
                     val notices = buildList {
                         if (empty.isNotEmpty()) {
-                            add("${region.sigungu}에는 ${Speech.list(empty.map { it.label })}의 이번 주 새 지역 소식이 없습니다.")
+                            add("${region.displayName}에는 ${Speech.list(empty.map { it.label })}의 이번 주 새 지역 소식이 없습니다.")
                         }
                         if (failed.isNotEmpty()) {
-                            add("${region.sigungu}의 ${Speech.list(failed.map { it.label })} 소식을 불러오지 못했습니다.")
+                            add("${region.displayName}의 ${Speech.list(failed.map { it.label })} 소식을 불러오지 못했습니다.")
                         }
                     }
                     // Keep a short explanation even when the trip budget trims regional news.
                     add(Segment("지역 소식 안내", notices.joinToString(" "),
-                        region = region.sigungu.substringAfterLast(" ")))
+                        region = region.shortDisplayName))
                 }
                 return@forEach
             }
@@ -410,8 +410,8 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
             here.forEachIndexed { index, (category, item) ->
                 val lead = when {
                     here.size == 1 && item?.region == null -> "${category.label} 소식입니다."
-                    here.size == 1 -> "${region.sigungu} ${category.label} 소식입니다."
-                    index == 0 -> "${region.sigungu} 소식입니다. 먼저 ${category.label}입니다."
+                    here.size == 1 -> "${region.displayName} ${category.label} 소식입니다."
+                    index == 0 -> "${region.displayName} 소식입니다. 먼저 ${category.label}입니다."
                     else -> "이어서 ${category.label}입니다."
                 }
                 if (item != null) {
@@ -420,9 +420,9 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
                     add(
                         Segment(
                             category.label,
-                            "$lead ${region.sigungu}에는 이번 주 새 소식이 없습니다.",
+                            "$lead ${region.displayName}에는 이번 주 새 소식이 없습니다.",
                             priority = priorities[region.lawdCode],
-                            region = region.sigungu.substringAfterLast(" "),
+                            region = region.shortDisplayName,
                         ),
                     )
                 }
@@ -462,21 +462,21 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
                 // Keep each district's programs together, including unavailable programs.
                 here.mapIndexed { index, (category, news, failed) ->
                     val lead = when {
-                        here.size == 1 -> "지금 지나는 ${region.sigungu}의 ${category.label} 소식입니다."
-                        index == 0 -> "지금 지나는 ${region.sigungu} 소식입니다. 먼저 ${category.label}입니다."
+                        here.size == 1 -> "지금 지나는 ${region.displayName}의 ${category.label} 소식입니다."
+                        index == 0 -> "지금 지나는 ${region.displayName} 소식입니다. 먼저 ${category.label}입니다."
                         else -> "이어서 ${category.label}입니다."
                     }
                     val text = when {
-                        failed -> "${region.sigungu}의 ${category.label} 소식을 불러오지 못해 건너뜁니다."
+                        failed -> "${region.displayName}의 ${category.label} 소식을 불러오지 못해 건너뜁니다."
                         news != null -> news.text
-                        else -> "${region.sigungu}에는 이번 주 새 소식이 없습니다."
+                        else -> "${region.displayName}에는 이번 주 새 소식이 없습니다."
                     }
                     Segment(
                         category.label,
                         "$lead $text",
                         priority = Int.MAX_VALUE,
                         isSample = news?.isSample ?: false,
-                        region = region.sigungu.substringAfterLast(" "),
+                        region = region.shortDisplayName,
                         passing = true,
                     )
                 }
@@ -494,7 +494,7 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
          * so they are named in that order; a long route names the first three and the count.
          */
         fun routeLine(basis: RouteBasis, regions: List<Region>): String {
-            val names = regions.map { it.sigungu }
+            val names = regions.map { it.displayName }
             val order = when {
                 names.size > MAX_NAMED -> "${names.take(MAX_NAMED - 1).joinToString(", ")} 등 ${names.size}개 지역을 차례로"
                 else -> "${Speech.list(names)} 순서로"
@@ -536,7 +536,7 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
         text = "$lead ${news.text}",
         priority = news.region?.let { priorities[it.lawdCode] },
         isSample = news.isSample,
-        region = district.sigungu.substringAfterLast(" "),
+        region = district.shortDisplayName,
         highlight = news.highlight,
     )
 }

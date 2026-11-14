@@ -225,7 +225,7 @@ object PressReleases {
             val hits = recent.filter { r -> r.id !in used && words.any { it in r.title } }.take(PER_REGION)
             if (hits.isEmpty()) return@mapNotNull null
             used += hits.map { it.id }
-            Group(region, "", region.sigungu, hits)
+            Group(region, "", region.displayName, hits)
         }
         val provinces = regions.flatMap(::wider).distinct().mapNotNull { area ->
             val hits = recent.filter { r -> r.id !in used && area in r.title }.take(PER_REGION)

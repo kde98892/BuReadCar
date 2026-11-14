@@ -191,7 +191,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
             player.load(BriefingPlan.withClosing(segments, trip.remainSeconds))
             player.play(waitForOtherAudio = waitForAudio)
             _ui.update {
-                it.copy(preparing = false, status = null, tripActive = true, regions = regions.map(Region::sigungu))
+                it.copy(preparing = false, status = null, tripActive = true, regions = regions.map(Region::shortDisplayName))
             }
             val tracksNavi = store.mode == ListenMode.ON_ROUTE && !demo
             val demoPath = if (trip.basis == RouteBasis.Demo) DEMO_ROUTE.drop(1) else simulatedDrive(trip.points)
@@ -241,7 +241,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                 lastCheck = place
                 val region = regionOrNull(place) ?: return
                 if (!seen.add(region.lawdCode)) return
-                _ui.update { it.copy(regions = it.regions + region.sigungu) }
+                _ui.update { it.copy(regions = it.regions + region.shortDisplayName) }
                 player.insertPassing(builder.forPassing(categories, region, today))
             }
 

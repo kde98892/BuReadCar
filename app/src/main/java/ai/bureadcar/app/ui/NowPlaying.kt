@@ -45,7 +45,7 @@ internal fun NowPlaying(
     val c = LocalColors.current
     val category = Category.entries.firstOrNull { it.label == player.title }
     val part = category?.let { ui.schedule.categories(ui.today).indexOf(it) }?.takeIf { it >= 0 }?.let { "${it + 1}부" }
-    val stops = ui.regions.map(::shortName).distinct().take(MAX_STOPS)
+    val stops = ui.regions.distinct().take(MAX_STOPS)
     val current = stops.indexOf(player.region)
 
     Box(Modifier.fillMaxSize()) {
@@ -196,7 +196,5 @@ private fun RouteTimeline(stops: List<String>, current: Int, modifier: Modifier)
         }
     }
 }
-
-internal fun shortName(sigungu: String) = sigungu.substringAfterLast(" ")
 
 private const val MAX_STOPS = 6
