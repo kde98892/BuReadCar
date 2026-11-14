@@ -44,27 +44,28 @@ const CATEGORIES = [
   { key: 'price_index', label: '주택가격지수·증감률', short: '지수', live: true, icon: 'cat_price_index', desc: '주간 매매가격지수 변화' },
   { key: 'trade', label: '실거래가·신고가', short: '실거래', live: true, icon: 'cat_trade', desc: '이번 달 실거래와 신고가' },
   { key: 'rent', label: '전월세 시세', short: '전월세', live: true, icon: 'cat_rent', desc: '전세·월세 거래 흐름' },
-  { key: 'transport', label: '교통 호재', short: '교통', live: false, icon: 'cat_transport', desc: '철도·도로 사업 소식' },
-  { key: 'development', label: '개발 호재', short: '개발', live: false, icon: 'cat_development', desc: '신도시·산업단지 소식' },
-  { key: 'redevelopment', label: '재건축·재개발', short: '재건축', live: false, icon: 'cat_redevelopment', desc: '정비사업 진행 단계' },
-  { key: 'policy', label: '정책·규제', short: '정책', live: false, icon: 'cat_policy', desc: '대출·세금·규제 지역' },
+  { key: 'transport', label: '교통 호재', short: '교통', live: true, icon: 'cat_transport', desc: '철도·도로 사업 소식' },
+  { key: 'development', label: '개발 호재', short: '개발', live: true, icon: 'cat_development', desc: '신도시·산업단지 소식' },
+  { key: 'redevelopment', label: '재건축·재개발', short: '재건축', live: true, icon: 'cat_redevelopment', desc: '정비사업 진행 단계' },
+  { key: 'policy', label: '정책·규제', short: '정책', live: true, icon: 'cat_policy', desc: '대출·세금·규제 지역' },
   { key: 'rate', label: '금리·대출', short: '금리', live: true, icon: 'cat_rate', desc: '기준금리와 주택담보대출 금리' },
-  { key: 'unsold', label: '미분양·입주물량', short: '미분양', live: false, icon: 'cat_unsold', desc: '미분양과 입주 예정 물량' },
+  { key: 'unsold', label: '미분양·입주물량', short: '미분양', live: true, icon: 'cat_unsold', desc: '미분양과 입주 예정 물량' },
 ];
 const CAT = {};
 for (const c of CATEGORIES) CAT[c.key] = c;
 // WeeklySchedule.DEFAULT in the app
 const WEEK = [
-  { day: '월', slots: ['subscription', 'unsold'] },
-  { day: '화', slots: ['price_index', 'trade'] },
-  { day: '수', slots: ['transport', 'development'] },
-  { day: '목', slots: ['redevelopment', 'rent'] },
-  { day: '금', slots: ['policy', 'rate'] },
-];
+  { day: '월', slots: ['subscription', 'policy'] },
+  { day: '화', slots: ['trade', 'unsold'] },
+  { day: '수', slots: ['rent', 'redevelopment'] },
+  { day: '목', slots: ['transport', 'rate'] },
+  { day: '금', slots: ['price_index', 'development'] },
+]
 // DEMO_ROUTE districts in order (정자동 → 시흥동 → 세곡동 → 서초동 → 역삼동)
 const ROUTE = ['분당구', '수정구', '강남구', '서초구'];
 const ROUTE_NOW = 1;
-const SCRIPT = '수정구에서 이번 주 청약 접수를 받는 단지는 1곳이에요. 1순위 접수는 수요일에 시작하고, 지난달 이 지역 평균 경쟁률은 8.2 대 1이었어요.';
+// The screen shows only the sentence being spoken, so nothing is cut off.
+const SCRIPT = '1순위 청약 접수는 11월 18일 수요일에 시작합니다.';
 
 // ---------------------------------------------------------------- state
 let VL, VD, VM, VBYID, SUFFIX, LIGHT, DARK;
@@ -1235,7 +1236,7 @@ const TYPE_USE = {
   'Title/Medium/Bold': '페이지 제목, 팝업 제목',
   'Title/Small/Bold': '안내 문장',
   'Body/Large/Strong': '목록 제목, 요일',
-  'Body/Large/Normal': '방송 원고(최대 3줄), 팝업 설명',
+  'Body/Large/Normal': '지금 읽는 문장, 팝업 설명',
   'Body/Medium/Strong': 'Large 버튼, 탭',
   'Body/Medium/Normal': '카드 설명, 토스트',
   'Body/Small/Strong': 'Medium 버튼, 지역 칩',
@@ -1734,11 +1735,11 @@ async function nowPlayingScreen(o) {
     lockRow.appendChild(ICON('lock', 32, 'icon_dark_secondary'));
     await T(lockRow, '주행 중에는 소리로만 들려드려요', 'Body/Medium/Strong', 'text_dark_secondary');
   } else {
-    await T(left, SCRIPT, 'Body/Large/Normal', 'text_dark_secondary', { name: 'script', fillW: true, maxLines: 3 });
+    await T(left, SCRIPT, 'Body/Large/Normal', 'text_dark_secondary', { name: 'current sentence', fillW: true });
   }
   const badge = AL('HORIZONTAL', { name: 'data', gap: 8, align: 'CENTER', parent: left });
   badge.appendChild(dot(12, 'informative_active', 'live'));
-  await T(badge, '실시간 데이터 · 청약홈 분양정보', 'Label/Medium/Strong', 'text_dark_secondary');
+  await T(badge, '실시간 데이터', 'Label/Medium/Strong', 'text_dark_secondary');
   if (portrait) {
     const rr = AL('HORIZONTAL', { name: 'route', gap: 12, align: 'CENTER', wrap: true, wrapGap: 12, parent: main, fillW: true });
     ROUTE.forEach((d, i) => rr.appendChild(inst('chip', { State: i < ROUTE_NOW ? 'Passed' : i === ROUTE_NOW ? 'Current' : 'Default' }, { Label: d })));
@@ -1845,12 +1846,7 @@ async function settingsScreen(o) {
   const r3 = inst('listRow', { Trailing: 'Switch' }, { Title: '안내가 시작되면 자동으로 듣기', Description: '내비 길 안내를 시작하면 바로 틀어요', 'Leading icon': iconId('play') });
   c2.appendChild(r3); r3.layoutSizingHorizontal = 'FILL';
   setNested(r3, 'control', { Checked: 'On' });
-  const info = AL('VERTICAL', { name: 'sources', gap: 12, pad: 32, fill: 'surface_basic', radius: 24, parent: c2, fillW: true });
-  await T(info, '데이터 출처', 'Body/Large/Strong');
-  for (const l of ['국토교통부 실거래가 · 전월세 (공공데이터포털)', '한국부동산원 R-ONE 주택가격지수', '한국은행 ECOS 금리 · 청약홈 분양정보']) {
-    await T(info, l, 'Label/Medium/Normal', 'text_dark_secondary', { fillW: true });
-  }
-  await T(info, '참고용 정보이며 투자 권유가 아닙니다.', 'Label/Medium/Strong', 'text_dark_tertiary', { fillW: true });
+  await T(c2, '참고용 정보이며 투자 권유가 아닙니다.', 'Label/Medium/Normal', 'text_dark_tertiary', { fillW: true });
   return f;
 }
 
@@ -1864,7 +1860,7 @@ async function consentScreen(o) {
   dim.constraints = { horizontal: 'STRETCH', vertical: 'STRETCH' };
   const pop = inst('popup', { Size: 'Medium', Buttons: 'Single' }, {
     Title: '내 경로의 소식을 들으려면',
-    Description: '차량 위치를 V-World로 보내 지금 어느 시군구인지 확인해요. 결과는 저장하지 않고 주행 기록도 남기지 않아요.',
+    Description: '차량 위치로 지금 어느 시군구인지 확인해요. 결과는 저장하지 않고 주행 기록도 남기지 않아요.',
   });
   setNested(pop, 'confirm', { Label: '동의하고 시작' });
   absolute(f, pop, (f.width - pop.width) / 2, (f.height - pop.height) / 2);
