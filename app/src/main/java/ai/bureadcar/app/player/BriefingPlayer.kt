@@ -117,6 +117,7 @@ data class PlayerState(
     val finished: Boolean = false,
     val region: String? = null,
     val message: String? = null,
+    val waitingForAudio: Boolean = false,
 )
 
 /** Android focus is kept behind an interface so loss/denial can be tested without a car. */
@@ -181,6 +182,7 @@ class BriefingPlayer(
     private var resumeAfterPower = false
     private var audioPowerEnabled = true
     private var released = false
+    private var waitingForAudio = false
 
     init {
         focus.onLost = {
@@ -245,16 +247,29 @@ class BriefingPlayer(
         publish()
     }
 
-    fun play() {
+    fun play(waitForOtherAudio: Boolean = false) {
         if (released || playing || queue.currentSegment == null) return
         if (resumeOnGain) return // Wait for the system; never steal focus back from a prompt.
+        waitingForAudio = false
+        var otherAudioBlocked = false
         message = when {
             !audioPowerEnabled -> "절전 중에는 재생할 수 없어요"
             engine.ready.value != true -> "음성 엔진이 준비되지 않았어요. 잠시 후 다시 시도해 주세요"
-            !hasFocus && runCatching { focus.otherAudioActive }.getOrDefault(true) -> "다른 오디오가 재생 중이에요. 일시정지한 뒤 재생해 주세요"
+            !hasFocus && runCatching { focus.otherAudioActive }.getOrDefault(true) -> {
+                otherAudioBlocked = true
+                "다른 오디오가 재생 중이에요. 일시정지한 뒤 재생해 주세요"
+            }
             else -> null
         }
-        if (message != null) { publish(); return }
+        if (message != null) {
+            if (waitForOtherAudio && otherAudioBlocked) {
+                waitingForAudio = true
+                message = "다른 오디오가 끝나면 방송을 시작할게요"
+                retryPendingStart(generation, 30)
+            }
+            publish()
+            return
+        }
         val granted = hasFocus || runCatching { focus.request() }.getOrDefault(false)
         if (!granted) {
             message = "지금은 오디오를 사용할 수 없어요. 잠시 후 재생해 주세요"
@@ -266,6 +281,23 @@ class BriefingPlayer(
         speakCurrent()
     }
 
+    /** Wait only for the initial automatic start; never take focus from active audio. */
+    private fun retryPendingStart(token: Long, remaining: Int) {
+        later(1_000L) {
+            if (token != generation || !waitingForAudio || released || !audioPowerEnabled) return@later
+            if (!runCatching { focus.otherAudioActive }.getOrDefault(true)) {
+                waitingForAudio = false
+                play()
+            } else if (remaining > 1) {
+                retryPendingStart(token, remaining - 1)
+            } else {
+                waitingForAudio = false
+                message = "다른 오디오가 계속 재생 중이에요. 끝난 뒤 재생을 눌러 주세요"
+                publish()
+            }
+        }
+    }
+
     fun pause() {
         resumeOnGain = false
         resumeAfterPower = false
@@ -275,7 +307,7 @@ class BriefingPlayer(
     }
 
     fun toggle() {
-        if (playing) pause() else play()
+        if (playing || waitingForAudio) pause() else play()
     }
 
     fun next() {
@@ -351,6 +383,8 @@ class BriefingPlayer(
     }
 
     private fun stopSpeech() {
+        if (waitingForAudio) message = null
+        waitingForAudio = false
         playing = false
         generation++
         engine.stop()
@@ -358,6 +392,8 @@ class BriefingPlayer(
     }
 
     private fun end() {
+        if (waitingForAudio) message = null
+        waitingForAudio = false
         finishing = false
         playing = false
         resumeOnGain = false
@@ -366,7 +402,8 @@ class BriefingPlayer(
         hasFocus = false
         engine.stop()
         runCatching { focus.abandon() }
-        _state.value = _state.value.copy(playing = false, finished = true, next = null)
+        _state.value = _state.value.copy(playing = false, finished = true, next = null,
+            waitingForAudio = false, message = message)
     }
 
     private fun publish() {
@@ -383,6 +420,7 @@ class BriefingPlayer(
             next = queue.nextSegment?.title,
             region = segment?.region,
             message = message,
+            waitingForAudio = waitingForAudio,
         )
     }
 }

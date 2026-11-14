@@ -117,7 +117,8 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                     // or reroutes a route, and after a demo nothing starts on its own until a briefing is started
                     // by hand (the emulator's navigation keeps restarting its simulated route).
                     NaviSource.Event.ROUTE_STARTED ->
-                        if (_ui.value.autoStart && _ui.value.consent && !_ui.value.tripActive && !busy() && !demoRunning) start()
+                        if (_ui.value.autoStart && _ui.value.consent && !_ui.value.tripActive && !busy() && !demoRunning)
+                            launchBriefing(null, demo = false, waitForAudio = true)
                     // The demo drives on its own clock, so the navigation's arrival does not end it.
                     NaviSource.Event.ROUTE_ENDED -> if (_ui.value.tripActive && !demoRunning) endTrip()
                 }
@@ -154,7 +155,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(tripActive = false, preparing = false, regions = emptyList(), status = null) }
     }
 
-    private fun launchBriefing(only: Category?, demo: Boolean) {
+    private fun launchBriefing(only: Category?, demo: Boolean, waitForAudio: Boolean = false) {
         demoRunning = demo
         briefingJob?.cancel()
         trackingJob?.cancel()
@@ -188,7 +189,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                 trip.basis,
             )
             player.load(BriefingPlan.withClosing(segments, trip.remainSeconds))
-            player.play()
+            player.play(waitForOtherAudio = waitForAudio)
             _ui.update {
                 it.copy(preparing = false, status = null, tripActive = true, regions = regions.map(Region::sigungu))
             }

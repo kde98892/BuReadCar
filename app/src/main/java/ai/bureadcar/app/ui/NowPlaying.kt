@@ -134,11 +134,11 @@ internal fun NowPlaying(
                         modifier = Modifier.size(128.dp),
                         shape = CircleShape,
                         background = { if (it) c.filledPressed else c.filledEnabled },
-                        label = if (player.playing) "일시정지" else "재생",
+                        label = if (player.playing || player.waitingForAudio) "일시정지" else "재생",
                     ) {
                         Icon(
-                            if (player.playing) PleosIcons.pause else PleosIcons.play,
-                            if (player.playing) "일시정지" else "재생",
+                            if (player.playing || player.waitingForAudio) PleosIcons.pause else PleosIcons.play,
+                            if (player.playing || player.waitingForAudio) "일시정지" else "재생",
                             Modifier.size(64.dp),
                             tint = c.onFilled[0],
                         )
