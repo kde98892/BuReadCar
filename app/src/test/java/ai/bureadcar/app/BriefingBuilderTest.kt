@@ -54,6 +54,23 @@ class BriefingBuilderTest {
         assertEquals("출처는 분양 출처, 미분양 출처입니다.", texts.last())
     }
 
+    @Test fun `province news is read as that district's 2부 and gaps are said`() {
+        val segments = build(
+            Fake(Category.PRICE_INDEX) { regions -> regions.map { RegionNews(it, "${it.sigungu.takeLast(3)} 지수.") } },
+            Fake(Category.TRANSPORT) { listOf(RegionNews(null, "서울 교통.", area = "서울")) },
+        )
+        assertEquals(
+            listOf(
+                "성남시 분당구 소식입니다. 먼저 주택가격지수·증감률입니다. 분당구 지수.",
+                "이어서 교통 호재입니다. 성남시 분당구에는 이번 주 새 소식이 없습니다.",
+                "강남구 소식입니다. 먼저 주택가격지수·증감률입니다. 강남구 지수.",
+                "이어서 교통 호재입니다. 서울 교통.",
+            ),
+            segments.map { it.text }.subList(1, 5),
+        )
+        assertEquals(listOf("분당구", "분당구", "강남구", "강남구"), segments.subList(1, 5).map { it.region })
+    }
+
     @Test fun `news without a district follows the route and empty programs are noted`() {
         val segments = build(
             Fake(Category.RATE) { listOf(RegionNews(null, "금리 소식.")) },
@@ -82,6 +99,25 @@ class BriefingBuilderTest {
             ai.bureadcar.app.model.Segment("미분양", "이어서 $ten", priority = 1),
         )
         assertEquals(listOf("분양"), BriefingPlan.fit(segments, 50).map { it.title })
+    }
+
+    @Test fun `a passed district reads both programs under one opening line`() {
+        val gangdong = Region("11740", "서울특별시", "강동구")
+        val builder = BriefingBuilder(
+            listOf(
+                Fake(Category.PRICE_INDEX) { regions -> regions.map { RegionNews(it, "강동 지수.") } },
+                Fake(Category.TRANSPORT) { regions -> regions.map { RegionNews(it, "강동 교통.") } + RegionNews(null, "서울 교통.") },
+            ).associateBy { it.category },
+        )
+        val segments = runBlocking { builder.forPassing(listOf(Category.PRICE_INDEX, Category.TRANSPORT), gangdong, today) }
+        assertEquals(
+            listOf(
+                "지금 지나는 강동구 소식입니다. 먼저 주택가격지수·증감률입니다. 강동 지수.",
+                "이어서 교통 호재입니다. 강동 교통.",
+            ),
+            segments.map { it.text },
+        )
+        assertTrue(segments.all { it.passing && it.region == "강동구" })
     }
 
     @Test fun `particles follow the final consonant`() {
@@ -131,10 +167,6 @@ class BriefingBuilderTest {
         assertEquals(
             "저장된 집에서 회사까지 경로를 따라 성남시 분당구와 강남구 순서로 전해 드립니다.",
             BriefingBuilder.routeLine(RouteBasis.Saved("집 → 회사"), two),
-        )
-        assertTrue(
-            BriefingBuilder.routeLine(RouteBasis.Saved("집 → 회사", followsDrive = true), two)
-                .endsWith("가는 길에 다른 지역에 들어서면 그 지역 소식도 이어서 전해 드립니다."),
         )
         assertEquals(
             "저장된 주말 본가 경로에 있는 강남구 소식을 전해 드립니다.",

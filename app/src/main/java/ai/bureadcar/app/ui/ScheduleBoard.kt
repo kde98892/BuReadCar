@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -216,34 +217,44 @@ private fun Slot(
 ) {
     val c = LocalColors.current
     var slotOrigin by remember { mutableStateOf(Offset.Zero) }
+    val start by rememberUpdatedState(onDragStart)
+    val move by rememberUpdatedState(onMove)
+    val drop by rememberUpdatedState(onDrop)
+    val cancel by rememberUpdatedState(onCancel)
     val shape = RoundedCornerShape(24.dp)
-    val framed = when (state) {
-        SlotState.Empty -> modifier.dashedBorder(c.lineStrong, 24.dp)
-        SlotState.Target -> modifier.clip(shape).background(c.basicEnabled).border(4.dp, c.positive, shape)
-        SlotState.Invalid -> modifier.clip(shape).background(c.basicEnabled).border(4.dp, c.negative, shape)
-        SlotState.Filled -> modifier
+    val frame = when (state) {
+        SlotState.Empty -> Modifier.dashedBorder(c.lineStrong, 24.dp)
+        SlotState.Target -> Modifier.clip(shape).background(c.basicEnabled).border(4.dp, c.positive, shape)
+        SlotState.Invalid -> Modifier.clip(shape).background(c.basicEnabled).border(4.dp, c.negative, shape)
+        SlotState.Filled -> Modifier
     }
-    Box(framed.onGloballyPositioned { slotOrigin = it.positionInRoot() }, contentAlignment = Alignment.Center) {
-        when (state) {
-            SlotState.Filled -> CategoryTile(
-                category!!,
-                Modifier.fillMaxSize().pointerInput(category) {
-                    detectDragGestures(
-                        onDragStart = { onDragStart(category, slotOrigin + it) },
-                        onDrag = { change, delta ->
-                            change.consume()
-                            onMove(delta)
-                        },
-                        onDragEnd = onDrop,
-                        onDragCancel = onCancel,
-                    )
-                },
-            )
-            SlotState.Invalid -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(PleosIcons.close, null, Modifier.size(40.dp), tint = c.negative)
-                Text("이미 있어요", style = PleosType.LabelMStrong, color = c.negative)
+    // The drag is detected on this outer box, which stays while the slot turns empty or highlighted under
+    // the finger. Detecting it on the box inside would end the gesture as soon as the drag began.
+    Box(
+        modifier
+            .onGloballyPositioned { slotOrigin = it.positionInRoot() }
+            .pointerInput(category) {
+                val dragged = category ?: return@pointerInput
+                detectDragGestures(
+                    onDragStart = { start(dragged, slotOrigin + it) },
+                    onDrag = { change, delta ->
+                        change.consume()
+                        move(delta)
+                    },
+                    onDragEnd = { drop() },
+                    onDragCancel = { cancel() },
+                )
+            },
+    ) {
+        Box(Modifier.fillMaxSize().then(frame), contentAlignment = Alignment.Center) {
+            when (state) {
+                SlotState.Filled -> CategoryTile(category!!, Modifier.fillMaxSize())
+                SlotState.Invalid -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(PleosIcons.close, null, Modifier.size(40.dp), tint = c.negative)
+                    Text("이미 있어요", style = PleosType.LabelMStrong, color = c.negative)
+                }
+                else -> Icon(PleosIcons.add, "비어 있음", Modifier.size(40.dp), tint = if (state == SlotState.Target) c.positive else c.faint)
             }
-            else -> Icon(PleosIcons.add, "비어 있음", Modifier.size(40.dp), tint = if (state == SlotState.Target) c.positive else c.faint)
         }
     }
 }

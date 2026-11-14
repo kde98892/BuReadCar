@@ -157,11 +157,13 @@ fun simulatedDrive(stops: List<Place>): List<Place> {
 private const val DEMO_SPACING_M = 3_000.0
 private const val DEMO_MAX_POINTS = 12
 
-/** Scripted commute for the emulator, whose location never moves. */
+/**
+ * Scripted commute for the emulator, whose location never moves: Hanam to Gangnam through Gangdong and
+ * Songpa. Prices rise in Hanam while Songpa and Gangnam fall, and Hanam has its own transport news.
+ */
 val DEMO_ROUTE = listOf(
-    Place("분당구 정자동", 37.3825, 127.1086),
-    Place("수정구 시흥동", 37.4127, 127.0947),
-    Place("강남구 세곡동", 37.4640, 127.1040),
-    Place("서초구 서초동", 37.4979, 127.0276),
-    Place("강남구 역삼동", 37.5006, 127.0366),
+    Place("하남시 미사역", 37.5631, 127.1928),
+    Place("강동구 고덕역", 37.5550, 127.1540),
+    Place("송파구 잠실역", 37.5133, 127.1001),
+    Place("강남구 삼성역", 37.5089, 127.0631),
 )

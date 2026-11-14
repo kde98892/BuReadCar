@@ -122,7 +122,7 @@ object PressReleases {
         .replace(Regex("\\s*[→~∼]\\s*"), "에서 ")
         .replace("↑", " 상승").replace("↓", " 하락")
         .replace("社", "사")
-        .replace("㎡", "제곱미터")
+        .replace("㎡", "제곱미터").replace(Regex("(?<=[\\d만천억])\\s?(m²|m2)(?![\\w])"), "제곱미터")
         .replace(Regex("…|‥|···|·{2,}"), ", ")
         .replace(Regex("[·‧･․ㆍ]"), ", ")
         .replace(Regex("[「『｢《【‘“]"), " ")
@@ -254,6 +254,7 @@ object PressReleases {
             group.region,
             group.intro + group.releases.joinToString(" 다음은 ") { spoken(it, details[it.id].orEmpty()) },
             highlight = highlight(group.place, group.releases.first()),
+            area = group.place.takeIf { group.region == null },
         )
     }
 
@@ -344,13 +345,17 @@ class PressReleaseFeed {
         const val DOWNLOAD = "https://www.molit.go.kr/portal/common/download/DownloadMltm2.jsp"
         const val MAX_PAGES = 10
         const val WINDOW_DAYS = 31L
-        const val CACHE_MS = 30 * 60 * 1000L
+        const val CACHE_MS = 60 * 60 * 1000L
     }
 }
 
 class PressReleaseProvider(override val category: Category, private val feed: PressReleaseFeed) : NewsProvider {
     override val source = PressReleases.SOURCE
     override val regional = true
+
+    override suspend fun warmUp(today: LocalDate) {
+        feed.recent(today)
+    }
 
     override suspend fun fetch(regions: List<Region>, today: LocalDate): List<RegionNews> {
         val mine = feed.recent(today).filter { PressReleases.classify(it) == category }
