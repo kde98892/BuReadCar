@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -32,8 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.DayOfWeek
 
@@ -57,7 +53,6 @@ fun App(viewModel: RadioViewModel) {
     val ttsReady by viewModel.ttsReady.collectAsState()
     val limits by viewModel.limits.collectAsState()
     var screen by remember { mutableStateOf(Screen.HOME) }
-    var pickingDemoDay by remember { mutableStateOf(false) }
 
     LaunchedEffect(limits.setupBlocked) {
         if (limits.setupBlocked) screen = Screen.HOME
@@ -82,17 +77,6 @@ fun App(viewModel: RadioViewModel) {
                     viewModel = viewModel,
                     openSchedule = { screen = Screen.SCHEDULE },
                     openSettings = { screen = Screen.SETTINGS },
-                    openDemo = { pickingDemoDay = true },
-                )
-            }
-            if (pickingDemoDay) {
-                DemoDayPopup(
-                    ui,
-                    onPick = { day ->
-                        pickingDemoDay = false
-                        viewModel.startDemo(day)
-                    },
-                    onCancel = { pickingDemoDay = false },
                 )
             }
             if (!ui.consent) {
@@ -118,7 +102,6 @@ private fun Home(
     viewModel: RadioViewModel,
     openSchedule: () -> Unit,
     openSettings: () -> Unit,
-    openDemo: () -> Unit,
 ) {
     val c = LocalColors.current
     val today = ui.schedule.slots(ui.today)
@@ -188,7 +171,7 @@ private fun Home(
                     )
                 }
                 WeekStrip(ui, wide, Modifier.clickable(remember { MutableInteractionSource() }, null, enabled = !setupBlocked, onClick = openSchedule)) {
-                    PleosTextButton("시연 주행", openDemo, enabled = ui.consent && !ui.preparing)
+                    PleosTextButton("시연 주행", { viewModel.startDemo() }, enabled = ui.consent && !ui.preparing)
                 }
             }
         }
@@ -225,54 +208,3 @@ private fun WeekStrip(ui: RadioState, wide: Boolean, modifier: Modifier, trailin
 }
 
 internal val weekdays get() = ai.bureadcar.app.schedule.WEEKDAYS
-
-/**
- * Asks which weekday the demo drive plays, so the audience knows what they will hear on any day.
- * A day with no programs cannot be picked.
- */
-@Composable
-private fun DemoDayPopup(ui: RadioState, onPick: (DayOfWeek) -> Unit, onCancel: () -> Unit) {
-    val c = LocalColors.current
-    PopupFrame(
-        title = "어느 요일 방송으로 시연할까요?",
-        description = "고른 요일의 1부와 2부를 내비게이션이나 저장된 경로를 따라 들려 드려요. 따라갈 경로가 없으면 시연 경로로 대신해요.",
-        maxWidth = 1080.dp,
-    ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            weekdays.forEach { day ->
-                val programs = ui.schedule.categories(day)
-                val enabled = programs.isNotEmpty()
-                val shape = RoundedCornerShape(24.dp)
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .heightIn(min = 144.dp)
-                        .clip(shape)
-                        .background(if (day == ui.today) c.filledEnabled else c.basicEnabled)
-                        .clickable(enabled = enabled) { onPick(day) }
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-                ) {
-                    val onToday = day == ui.today
-                    Text(
-                        "${dayLabel(day)}요일",
-                        style = PleosType.BodyLStrong,
-                        color = when {
-                            !enabled -> c.off
-                            onToday -> c.onFilled[0]
-                            else -> c.ink
-                        },
-                    )
-                    Text(
-                        if (enabled) programs.joinToString(" · ") { it.short } else "편성 없음",
-                        style = PleosType.LabelM,
-                        color = if (onToday) c.onFilled[1] else c.faint,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-        }
-        PleosButton("취소", onCancel, Modifier.fillMaxWidth())
-    }
-}

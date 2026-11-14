@@ -296,8 +296,9 @@ class BriefingPlayer(
         play()
     }
 
-    fun insertNext(segments: List<Segment>) {
-        queue.insertNext(segments)
+    /** Adds a district entered on the way; see [PlaybackQueue.insertPassing]. */
+    fun insertPassing(segments: List<Segment>) {
+        queue.insertPassing(segments)
         publish()
     }
 

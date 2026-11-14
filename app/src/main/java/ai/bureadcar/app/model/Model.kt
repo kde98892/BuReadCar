@@ -30,8 +30,7 @@ sealed interface RouteBasis {
     /** Navigation has no destination, so only where the car is now. */
     data object CurrentLocation : RouteBasis
 
-    /** [followsDrive] when the demo drives along it and adds districts on the way. */
-    data class Saved(val name: String, val followsDrive: Boolean = false) : RouteBasis
+    data class Saved(val name: String) : RouteBasis
 
     data object Demo : RouteBasis
 }
@@ -53,6 +52,8 @@ data class Segment(
     val region: String? = null,
     /** The point this news leaves; repeated in the closing summary. */
     val highlight: String? = null,
+    /** News of a district entered on the way, added while the briefing plays. */
+    val passing: Boolean = false,
 )
 
 private val SIDO_PREFIXES = listOf(

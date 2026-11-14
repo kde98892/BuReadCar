@@ -3,8 +3,8 @@ package ai.bureadcar.app.ui
 import ai.bureadcar.app.briefing.BriefingPlan
 import ai.bureadcar.app.data.BriefingBuilder
 import ai.bureadcar.app.data.VWorldGeocoder
-import ai.bureadcar.app.data.apiResult
 import ai.bureadcar.app.data.allProviders
+import ai.bureadcar.app.data.apiResult
 import ai.bureadcar.app.model.Category
 import ai.bureadcar.app.model.ListenMode
 import ai.bureadcar.app.model.Place
@@ -28,6 +28,9 @@ import androidx.lifecycle.viewModelScope
 import java.time.DayOfWeek
 import java.time.LocalDate
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +51,12 @@ data class RadioState(
     val preparing: Boolean = false,
     val tripActive: Boolean = false,
 )
+
+/**
+ * The weekday the app presents as today. Pinned to Monday so the weekday screen and lineup can be
+ * filmed on any day; set to null to follow the calendar again.
+ */
+private val BROADCAST_DAY: DayOfWeek? = DayOfWeek.MONDAY
 
 private data class Trip(val points: List<Place>, val remainSeconds: Int?, val basis: RouteBasis)
 
@@ -86,21 +95,31 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                 .ifEmpty { listOf(SettingsStore.EXAMPLE_ROUTE) },
             selectedRouteId = store.selectedRouteId,
             consent = store.locationConsent,
-            today = LocalDate.now().dayOfWeek,
+            today = BROADCAST_DAY ?: LocalDate.now().dayOfWeek,
         ),
     )
     val radio: StateFlow<RadioState> = _ui
 
     private var briefingJob: Job? = null
+    private var demoRunning = false
+
+    private fun busy() = _ui.value.preparing || player.state.value.playing
     private var trackingJob: Job? = null
 
     init {
+        // Public APIs answer slowly (R-ONE takes seconds per request), so lists that do not depend on the
+        // route are fetched as soon as the app opens.
+        viewModelScope.launch { builder.warmUp(LocalDate.now()) }
         viewModelScope.launch {
             navi.events.collect { event ->
                 when (event) {
+                    // A briefing already playing or being prepared is not restarted when the navigation starts
+                    // or reroutes a route, and after a demo nothing starts on its own until a briefing is started
+                    // by hand (the emulator's navigation keeps restarting its simulated route).
                     NaviSource.Event.ROUTE_STARTED ->
-                        if (_ui.value.autoStart && _ui.value.consent && !_ui.value.tripActive) start()
-                    NaviSource.Event.ROUTE_ENDED -> if (_ui.value.tripActive) endTrip()
+                        if (_ui.value.autoStart && _ui.value.consent && !_ui.value.tripActive && !busy() && !demoRunning) start()
+                    // The demo drives on its own clock, so the navigation's arrival does not end it.
+                    NaviSource.Event.ROUTE_ENDED -> if (_ui.value.tripActive && !demoRunning) endTrip()
                 }
             }
         }
@@ -122,10 +141,10 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Plays today's briefing for the selected mode, or [only] that category. */
-    fun start(only: Category? = null) = launchBriefing(only, demoDay = null)
+    fun start(only: Category? = null) = launchBriefing(only, demo = false)
 
-    /** Plays the demo drive with [day]'s programs, so any weekday can be shown on any day. */
-    fun startDemo(day: DayOfWeek) = launchBriefing(null, demoDay = day)
+    /** Plays the demo drive with today's programs (the pinned broadcast day while filming). */
+    fun startDemo() = launchBriefing(null, demo = true)
 
     fun stop() {
         briefingJob?.cancel()
@@ -135,8 +154,8 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(tripActive = false, preparing = false, regions = emptyList(), status = null) }
     }
 
-    private fun launchBriefing(only: Category?, demoDay: DayOfWeek?) {
-        val demo = demoDay != null
+    private fun launchBriefing(only: Category?, demo: Boolean) {
+        demoRunning = demo
         briefingJob?.cancel()
         trackingJob?.cancel()
         player.pause()
@@ -144,19 +163,19 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
             _ui.update { it.copy(preparing = true, status = "경로 지역과 소식을 준비하고 있어요", regions = emptyList()) }
             if (!_ui.value.consent) return@launch fail("위치 정보 이용에 동의한 후 시작해 주세요")
             val today = LocalDate.now()
-            val day = demoDay ?: today.dayOfWeek
+            val day = _ui.value.today
             val categories = if (only != null) listOf(only) else _ui.value.schedule.categories(day)
             var trip = if (demo) demoTrip() else resolveTrip()
             if (categories.isEmpty()) return@launch fail("오늘은 편성된 소식이 없어요")
             if (trip == null) return@launch fail("현재 위치를 받지 못했어요")
 
-            var regions = BriefingPlan.distinctRegions(trip.points.mapNotNull { regionOrNull(it) })
+            var regions = BriefingPlan.distinctRegions(geocode(trip.points))
             if (regions.isEmpty() && demo && trip.basis != RouteBasis.Demo) {
                 // The route's places fall in no known district (e.g. an emulator's default location),
                 // so the demo still runs, on the scripted commute.
                 Log.i(TAG, "Demo route had no districts; using the scripted commute")
                 trip = SCRIPTED_DEMO
-                regions = BriefingPlan.distinctRegions(trip.points.mapNotNull { regionOrNull(it) })
+                regions = BriefingPlan.distinctRegions(geocode(trip.points))
             }
             if (regions.isEmpty()) return@launch fail("지역을 확인하지 못했어요. 네트워크를 확인해 주세요")
 
@@ -179,19 +198,9 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * The demo follows the navigation while it guides, whatever the listen mode; otherwise the saved route
-     * in that mode. Only with neither does it take the scripted commute.
-     */
-    private suspend fun demoTrip(): Trip {
-        naviTrip()?.takeIf { it.basis == RouteBasis.Navigation && it.points.size >= 2 }?.let { return it }
-        if (store.mode == ListenMode.SAVED_ROUTE) {
-            savedTrip()?.takeIf { it.points.size >= 2 }?.let { trip ->
-                return trip.copy(basis = (trip.basis as RouteBasis.Saved).copy(followsDrive = true))
-            }
-        }
-        return SCRIPTED_DEMO
-    }
+    /** The demo follows the navigation while it guides; otherwise it drives the scripted commute. */
+    private suspend fun demoTrip(): Trip =
+        naviTrip()?.takeIf { it.basis == RouteBasis.Navigation && it.points.size >= 2 } ?: SCRIPTED_DEMO
 
     private suspend fun resolveTrip(): Trip? =
         if (store.mode == ListenMode.SAVED_ROUTE) savedTrip() else naviTrip()
@@ -212,6 +221,11 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
         return points.takeIf { it.isNotEmpty() }?.let { Trip(it, trip.remainSeconds, basis) }
     }
 
+    /** Districts of [places] in order, looked up at the same time. */
+    private suspend fun geocode(places: List<Place>): List<Region> = coroutineScope {
+        places.map { async { regionOrNull(it) } }.awaitAll().filterNotNull()
+    }
+
     private suspend fun regionOrNull(place: Place): Region? =
         apiResult { geocoder.region(place) }.getOrNull()
 
@@ -227,7 +241,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                 val region = regionOrNull(place) ?: return
                 if (!seen.add(region.lawdCode)) return
                 _ui.update { it.copy(regions = it.regions + region.sigungu) }
-                player.insertNext(builder.forPassing(categories, region, today))
+                player.insertPassing(builder.forPassing(categories, region, today))
             }
 
             if (demo) {

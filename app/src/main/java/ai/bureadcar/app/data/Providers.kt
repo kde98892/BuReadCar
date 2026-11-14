@@ -10,6 +10,12 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.temporal.IsoFields
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 
 /** Fetches one category's news. Regional providers return one segment per region with news. */
 interface NewsProvider {
@@ -18,14 +24,21 @@ interface NewsProvider {
     /** False for nationwide news, which is read once per briefing. */
     val regional: Boolean
     suspend fun fetch(regions: List<Region>, today: LocalDate): List<RegionNews>
+
+    /** Loads what does not depend on the route ahead of time, so the first briefing starts sooner. */
+    suspend fun warmUp(today: LocalDate) {}
 }
 
-/** [highlight] is one sentence for the closing summary: the point worth remembering. */
+/**
+ * [highlight] is one sentence for the closing summary: the point worth remembering.
+ * [area] places news with no district: a province ("서울"), "수도권", or "전국"; null reads as nationwide.
+ */
 data class RegionNews(
     val region: Region?,
     val text: String,
     val isSample: Boolean = false,
     val highlight: String? = null,
+    val area: String? = null,
 )
 
 private const val RTMS = "https://apis.data.go.kr/1613000"
@@ -121,7 +134,9 @@ class SubscriptionProvider : NewsProvider {
             nextWeek,
         ) ?: return emptyList()
         // Province news is not one district's, so it is read after the route.
-        return listOf(RegionNews(null, text, highlight = Scripts.noticeHighlight(region.sidoShort, thisWeek, nextWeek)))
+        return listOf(
+            RegionNews(null, text, highlight = Scripts.noticeHighlight(region.sidoShort, thisWeek, nextWeek), area = region.sidoShort),
+        )
     }
 
     /** The latest notice that closed in the last month, with its applications and shortfalls. */
@@ -207,27 +222,49 @@ class PriceIndexProvider : NewsProvider {
 
     private val base = "https://www.reb.or.kr/r-one/openapi"
     private val table = "T244183132827305"
+    private val classMutex = Mutex()
     private var classes: List<Pair<Int, String>>? = null
 
-    override suspend fun fetch(regions: List<Region>, today: LocalDate): List<RegionNews> {
-        val known = classes ?: loadClasses().also { classes = it }
-        val loaded = mutableMapOf<Int, List<Scripts.IndexPoint>>()
-        suspend fun points(id: Int) = loaded.getOrPut(id) { loadPoints(id, today) }
-        return regions.mapNotNull { region ->
-            val (id, _) = Scripts.rOneClass(region, known) ?: return@mapNotNull null
-            val points = points(id)
+    /** Weekly data, so each class's points are kept for an hour (passing districts, replays). */
+    private val pointCache = java.util.concurrent.ConcurrentHashMap<Int, Pair<Long, List<Scripts.IndexPoint>>>()
+
+    override suspend fun warmUp(today: LocalDate) {
+        classList()
+    }
+
+    /**
+     * R-ONE takes seconds per request, so the districts' and their provinces' points are requested at once.
+     * A district's own failure fails the category; a province's only drops the comparison.
+     */
+    override suspend fun fetch(regions: List<Region>, today: LocalDate): List<RegionNews> = coroutineScope {
+        val known = classList()
+        val wanted = regions.mapNotNull { region ->
+            val own = Scripts.rOneClass(region, known)?.first ?: return@mapNotNull null
             // The province's own move for the same week, unless the district is the province (세종).
-            val wider = Scripts.rOneProvince(region, known)?.takeIf { it.first != id }?.let { (provinceId, name) ->
-                try {
-                    name to points(provinceId)
-                } catch (e: java.io.IOException) {
-                    null
-                }
+            Triple(region, own, Scripts.rOneProvince(region, known)?.takeIf { it.first != own })
+        }
+        val own = wanted.map { it.second }.distinct().associateWith { id -> async { points(id, today) } }
+        val provinces = wanted.mapNotNull { it.third?.first }.distinct().filterNot { it in own }
+            .associateWith { id -> async { runCatching { points(id, today) }.getOrNull() } }
+        wanted.mapNotNull { (region, id, province) ->
+            val points = own.getValue(id).await()
+            val wider = province?.let { (provinceId, name) ->
+                val other = own[provinceId]?.await() ?: provinces[provinceId]?.await()
+                other?.let { name to it }
             }
             Scripts.priceIndex(region.sigungu, points, wider)?.let {
                 RegionNews(region, it, highlight = Scripts.priceIndexHighlight(region.sigungu, points))
             }
         }
+    }
+
+    private suspend fun classList(): List<Pair<Int, String>> = classMutex.withLock {
+        classes ?: loadClasses().also { classes = it }
+    }
+
+    private suspend fun points(classId: Int, today: LocalDate): List<Scripts.IndexPoint> {
+        pointCache[classId]?.let { (at, cached) -> if (System.currentTimeMillis() - at < POINTS_TTL_MS) return cached }
+        return loadPoints(classId, today).also { pointCache[classId] = System.currentTimeMillis() to it }
     }
 
     private suspend fun loadClasses(): List<Pair<Int, String>> {
@@ -252,7 +289,9 @@ class PriceIndexProvider : NewsProvider {
         return "%d%02d".format(year, week)
     }
 
-
+    private companion object {
+        const val POINTS_TTL_MS = 60 * 60 * 1000L
+    }
 }
 
 class RateProvider : NewsProvider {
@@ -323,25 +362,52 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
     ): List<Segment> = buildList {
         val intro = "부.읽.카입니다. 참고용 정보이며 투자 권유가 아닙니다. 오늘은 $dayName ${Speech.list(categories.map { it.label })} 소식입니다."
         add(Segment("안내", listOfNotNull(intro, basis?.let { routeLine(it, regions) }).joinToString(" ")))
-        val results = categories.associateWith { apiResult { providers.getValue(it).fetch(regions, today) } }
+        // Providers wait on slow public APIs, so every category is fetched at the same time.
+        val results = coroutineScope {
+            categories.map { category -> async { category to apiResult { providers.getValue(category).fetch(regions, today) } } }
+                .awaitAll().toMap()
+        }
         val news = results.mapValues { it.value.getOrDefault(emptyList()) }
 
+        // News for a province or the whole country is read as that program's part in the first district
+        // of the route it covers, so every district keeps its 1부 then 2부.
+        val shared = categories.flatMap { category ->
+            news.getValue(category).filter { it.region == null }.map { item -> Triple(home(item.area, regions), category, item) }
+        }
         regions.forEach { region ->
-            val here = categories.flatMap { category ->
-                news.getValue(category).filter { it.region?.lawdCode == region.lawdCode }.map { category to it }
+            val parts = categories.map { category ->
+                val local = news.getValue(category).filter { it.region?.lawdCode == region.lawdCode } +
+                    shared.filter { it.first == region && it.second == category }.map { it.third }
+                category to local
+            }
+            if (parts.all { it.second.isEmpty() }) return@forEach
+            // A program with news elsewhere on the route says it has none here; nationwide ones stay quiet.
+            val here = parts.flatMap { (category, items) ->
+                when {
+                    items.isNotEmpty() -> items.map { category to it as RegionNews? }
+                    news.getValue(category).isNotEmpty() && providers.getValue(category).regional -> listOf(category to null)
+                    else -> emptyList()
+                }
             }
             here.forEachIndexed { index, (category, item) ->
                 val lead = when {
+                    here.size == 1 && item?.region == null -> "${category.label} 소식입니다."
                     here.size == 1 -> "${region.sigungu} ${category.label} 소식입니다."
                     index == 0 -> "${region.sigungu} 소식입니다. 먼저 ${category.label}입니다."
                     else -> "이어서 ${category.label}입니다."
                 }
-                add(toSegment(category, item, priorities, lead))
-            }
-        }
-        categories.forEach { category ->
-            news.getValue(category).filter { it.region == null }.forEach { item ->
-                add(toSegment(category, item, priorities, "${category.label} 소식입니다."))
+                if (item != null) {
+                    add(toSegment(category, item, priorities, lead, region))
+                } else {
+                    add(
+                        Segment(
+                            category.label,
+                            "$lead ${region.sigungu}에는 이번 주 새 소식이 없습니다.",
+                            priority = priorities[region.lawdCode],
+                            region = region.sigungu.substringAfterLast(" "),
+                        ),
+                    )
+                }
             }
         }
 
@@ -357,21 +423,40 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
     }
 
     /** News for a district entered mid-drive; regional categories only. */
-    suspend fun forPassing(categories: List<Category>, region: Region, today: LocalDate): List<Segment> =
-        categories.mapNotNull { providers[it]?.takeIf { p -> p.regional } }.flatMap { provider ->
+    suspend fun forPassing(categories: List<Category>, region: Region, today: LocalDate): List<Segment> = coroutineScope {
+        categories.mapNotNull { providers[it]?.takeIf { p -> p.regional } }
+            .map { provider -> async { provider to apiResult { provider.fetch(listOf(region), today) }.getOrDefault(emptyList()) } }
+            .awaitAll()
             // News without a district (province or nationwide stand-ins) was read at the start.
-            apiResult { provider.fetch(listOf(region), today) }.getOrDefault(emptyList())
-                .filter { it.region != null }
-                .map { news ->
+            .map { (provider, items) -> provider.category to items.filter { it.region != null } }
+            .let { parts ->
+                if (parts.all { it.second.isEmpty() }) return@let emptyList()
+                parts.flatMap { (category, items) -> if (items.isEmpty()) listOf(category to null) else items.map { category to it as RegionNews? } }
+            }
+            .let { here ->
+                // Read like the planned districts: one opening line, then 1부 and 2부 in turn.
+                here.mapIndexed { index, (category, news) ->
+                    val lead = when {
+                        here.size == 1 -> "지금 지나는 ${region.sigungu}의 ${category.label} 소식입니다."
+                        index == 0 -> "지금 지나는 ${region.sigungu} 소식입니다. 먼저 ${category.label}입니다."
+                        else -> "이어서 ${category.label}입니다."
+                    }
                     Segment(
-                        provider.category.label,
-                        "지금 지나는 ${region.sigungu}의 ${provider.category.label} 소식입니다. ${news.text}",
+                        category.label,
+                        "$lead ${news?.text ?: "${region.sigungu}에는 이번 주 새 소식이 없습니다."}",
                         priority = Int.MAX_VALUE,
-                        isSample = news.isSample,
+                        isSample = news?.isSample ?: false,
                         region = region.sigungu.substringAfterLast(" "),
+                        passing = true,
                     )
                 }
-        }
+            }
+    }
+
+    /** Loads route-independent data for every category in the background, ignoring failures. */
+    suspend fun warmUp(today: LocalDate) = coroutineScope {
+        providers.values.distinct().forEach { provider -> launch { apiResult { provider.warmUp(today) } } }
+    }
 
     companion object {
         /**
@@ -397,20 +482,31 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
                 }
                 RouteBasis.Demo -> "시연 주행 경로를 따라 $order 전해 드립니다."
             }
-            // Saved routes are read as saved unless the demo drives them; the others follow the car.
-            val follows = basis !is RouteBasis.Saved || basis.followsDrive
-            return if (follows) "$line 가는 길에 다른 지역에 들어서면 그 지역 소식도 이어서 전해 드립니다." else line
+            // Saved routes are read as saved; the others follow the car and add districts on the way.
+            return if (basis is RouteBasis.Saved) line else "$line 가는 길에 다른 지역에 들어서면 그 지역 소식도 이어서 전해 드립니다."
         }
 
         private const val MAX_NAMED = 4
+        private val CAPITAL_AREA = setOf("서울", "경기", "인천")
     }
 
-    private fun toSegment(category: Category, news: RegionNews, priorities: Map<String, Int>, lead: String) = Segment(
+    /** The first district on the route that [area] covers; the first district for nationwide news. */
+    private fun home(area: String?, regions: List<Region>): Region =
+        regions.firstOrNull { region ->
+            when (area) {
+                null, "전국" -> true
+                "수도권" -> region.sidoShort in CAPITAL_AREA
+                else -> region.sidoShort == area
+            }
+        } ?: regions.first()
+
+    /** [district] is where the news is read; shared news keeps no priority so it is never cut. */
+    private fun toSegment(category: Category, news: RegionNews, priorities: Map<String, Int>, lead: String, district: Region) = Segment(
         title = category.label,
         text = "$lead ${news.text}",
         priority = news.region?.let { priorities[it.lawdCode] },
         isSample = news.isSample,
-        region = news.region?.sigungu?.substringAfterLast(" "),
+        region = district.sigungu.substringAfterLast(" "),
         highlight = news.highlight,
     )
 }

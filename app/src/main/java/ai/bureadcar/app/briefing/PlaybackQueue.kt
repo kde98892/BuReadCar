@@ -39,9 +39,18 @@ class PlaybackQueue {
         return segmentIndex < segments.size
     }
 
-    /** Queues [items] right after what is playing now. */
-    fun insertNext(items: List<Segment>) {
-        val at = (segmentIndex + 1).coerceAtMost(segments.size)
+    /**
+     * Queues the news of a district entered on the way. It goes after the rest of the district being read
+     * (or about to be read, during the opening) and after districts already added this way, so each
+     * district's 1부 and 2부 stay together and districts keep route order.
+     */
+    fun insertPassing(items: List<Segment>) {
+        if (items.isEmpty()) return
+        val here = segments.drop(segmentIndex).firstOrNull { it.region != null }?.region
+        var at = (segmentIndex + 1).coerceAtMost(segments.size)
+        if (here != null) {
+            while (at < segments.size && (segments[at].region == here || segments[at].passing)) at++
+        }
         segments.addAll(at, items)
     }
 

@@ -84,12 +84,38 @@ class CoreLogicTest {
         assertEquals("첫째 문장.", queue.currentSentence)
         assertTrue(queue.advanceSentence())
         assertEquals("둘째 문장.", queue.currentSentence)
-        queue.insertNext(listOf(Segment("c", "끼어든 소식.")))
+        queue.insertPassing(listOf(Segment("c", "끼어든 소식.")))
         assertTrue(queue.advanceSentence())
         assertEquals("끼어든 소식.", queue.currentSentence)
         assertTrue(queue.advanceSentence())
         assertEquals("다음.", queue.currentSentence)
         assertFalse(queue.advanceSentence())
+    }
+
+    @Test fun `passed districts go after the current district, in route order`() {
+        val queue = PlaybackQueue()
+        queue.load(
+            listOf(
+                Segment("안내", "안내."),
+                Segment("지수", "하남 지수.", region = "하남시"),
+                Segment("교통", "하남 교통.", region = "하남시"),
+                Segment("지수", "강남 지수.", region = "강남구"),
+                Segment("교통", "서울 교통."),
+                Segment("오늘의 핵심", "끝."),
+            ),
+        )
+        // During the opening, the origin is about to be read, so a passed district waits for it.
+        queue.insertPassing(listOf(Segment("지수", "강동 지수.", region = "강동구", passing = true), Segment("교통", "강동 교통.", region = "강동구", passing = true)))
+        queue.skipSegment()
+        assertEquals("하남 지수.", queue.currentSentence)
+        queue.insertPassing(listOf(Segment("지수", "송파 지수.", region = "송파구", passing = true)))
+        val order = buildList {
+            do add(queue.currentSentence) while (queue.skipSegment())
+        }
+        assertEquals(
+            listOf("하남 지수.", "하남 교통.", "강동 지수.", "강동 교통.", "송파 지수.", "강남 지수.", "서울 교통.", "끝."),
+            order,
+        )
     }
 
     @Test fun `decimals do not split sentences`() {

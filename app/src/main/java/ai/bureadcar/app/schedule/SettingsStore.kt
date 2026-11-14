@@ -74,6 +74,6 @@ class SettingsStore(context: Context) {
         private const val KEY_ROUTES = "routes"
         const val HOME_OFFICE_ID = "home-office"
 
-        val EXAMPLE_ROUTE = SavedRoute("example", "예시: 정자동 → 역삼동", DEMO_ROUTE.first(), DEMO_ROUTE.last())
+        val EXAMPLE_ROUTE = SavedRoute("example", "예시: 미사역 → 삼성역", DEMO_ROUTE.first(), DEMO_ROUTE.last())
     }
 }

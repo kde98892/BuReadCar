@@ -175,6 +175,7 @@ class PressReleasesTest {
         assertEquals("2027년 상반기 착수", PressReleases.speakable("’27.상 착수"))
         assertEquals("최대 2퍼센트포인트, 화정동에서 도내동", PressReleases.speakable("최대 2%p, 화정동~도내동"))
         assertEquals("경쟁률 3.07대 1", PressReleases.speakable("경쟁률 3.07대 1"))
+        assertEquals("약 685만제곱미터 면적, 84제곱미터", PressReleases.speakable("약 685만m2 면적, 84m²"))
         assertEquals("2025년 3월에서 2026년 3월 직거래", PressReleases.speakable("’25.3월~’26.3월 직거래"))
         assertEquals("10월 19일부터 10월 30일까지, 11월 9일부터 11월 20일까지 점검", PressReleases.speakable("10.19(월)~10.30(금), 11.9~11.20 점검"))
         assertEquals("도심 속 2,150호, 10.4만호", PressReleases.speakable("도심 속 2,150호, 10.4만호"))
