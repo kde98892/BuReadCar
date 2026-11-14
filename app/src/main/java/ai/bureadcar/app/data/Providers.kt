@@ -380,7 +380,25 @@ class BriefingBuilder(private val providers: Map<Category, NewsProvider>) {
                     shared.filter { it.first == region && it.second == category }.map { it.third }
                 category to local
             }
-            if (parts.all { it.second.isEmpty() }) return@forEach
+            if (parts.all { it.second.isEmpty() }) {
+                val regional = categories.filter { providers.getValue(it).regional }
+                if (regional.isNotEmpty()) {
+                    val failed = regional.filter { results.getValue(it).isFailure }
+                    val empty = regional.filter { results.getValue(it).isSuccess }
+                    val notices = buildList {
+                        if (empty.isNotEmpty()) {
+                            add("${region.sigungu}에는 ${Speech.list(empty.map { it.label })}의 이번 주 새 지역 소식이 없습니다.")
+                        }
+                        if (failed.isNotEmpty()) {
+                            add("${region.sigungu}의 ${Speech.list(failed.map { it.label })} 소식을 불러오지 못했습니다.")
+                        }
+                    }
+                    // Keep a short explanation even when the trip budget trims regional news.
+                    add(Segment("지역 소식 안내", notices.joinToString(" "),
+                        region = region.sigungu.substringAfterLast(" ")))
+                }
+                return@forEach
+            }
             // A program with news elsewhere on the route says it has none here; nationwide ones stay quiet.
             val here = parts.flatMap { (category, items) ->
                 when {
