@@ -10,23 +10,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CalendarViewWeek
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -39,16 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Density
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
-
-private const val CAR_SCALE = 1.5f
 
 private enum class Screen { HOME, SCHEDULE, SETTINGS }
 
@@ -62,6 +49,7 @@ internal fun dayLabel(day: DayOfWeek) = when (day) {
     DayOfWeek.SUNDAY -> "일"
 }
 
+/** Sizes are Pleos px at 160dpi, which is 1dp on the Connect display, so no extra scaling. */
 @Composable
 fun App(viewModel: RadioViewModel) {
     val ui by viewModel.radio.collectAsState()
@@ -69,22 +57,19 @@ fun App(viewModel: RadioViewModel) {
     val ttsReady by viewModel.ttsReady.collectAsState()
     val limits by viewModel.limits.collectAsState()
     var screen by remember { mutableStateOf(Screen.HOME) }
+    var pickingDemoDay by remember { mutableStateOf(false) }
 
     LaunchedEffect(limits.setupBlocked) {
         if (limits.setupBlocked) screen = Screen.HOME
     }
 
-    // The car display reports density 1.0; sizes are scaled for arm's-length touch and reading.
-    val base = LocalDensity.current
-    val density = Density(base.density * if (base.density < 1.5f) CAR_SCALE else 1f, base.fontScale)
     val colors = if (isSystemInDarkTheme()) DarkColors else LightColors
-
-    CompositionLocalProvider(LocalDensity provides density, LocalColors provides colors) {
-        BoxWithConstraints(Modifier.fillMaxSize().background(colors.bg)) {
+    CompositionLocalProvider(LocalColors provides colors) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(colors.surfaceLow)) {
             val wide = maxWidth > maxHeight
             when {
-                screen == Screen.SCHEDULE -> ScheduleBoard(ui, viewModel) { screen = Screen.HOME }
-                screen == Screen.SETTINGS -> SettingsScreen(ui, viewModel) { screen = Screen.HOME }
+                screen == Screen.SCHEDULE -> ScheduleBoard(ui, viewModel, wide) { screen = Screen.HOME }
+                screen == Screen.SETTINGS -> SettingsScreen(ui, viewModel, wide) { screen = Screen.HOME }
                 player.loaded && !player.finished -> NowPlaying(ui, player, limits, wide, viewModel) {
                     if (!limits.setupBlocked) screen = Screen.SCHEDULE
                 }
@@ -97,13 +82,32 @@ fun App(viewModel: RadioViewModel) {
                     viewModel = viewModel,
                     openSchedule = { screen = Screen.SCHEDULE },
                     openSettings = { screen = Screen.SETTINGS },
+                    openDemo = { pickingDemoDay = true },
                 )
             }
-            if (!ui.consent) ConsentDialog(viewModel::grantConsent)
+            if (pickingDemoDay) {
+                DemoDayPopup(
+                    ui,
+                    onPick = { day ->
+                        pickingDemoDay = false
+                        viewModel.startDemo(day)
+                    },
+                    onCancel = { pickingDemoDay = false },
+                )
+            }
+            if (!ui.consent) {
+                SystemPopup(
+                    title = "내 경로의 소식을 들으려면",
+                    description = "차량 위치로 지금 어느 시군구인지 확인해요. 결과는 저장하지 않고 주행 기록도 남기지 않아요.",
+                    confirm = "동의하고 시작",
+                    onConfirm = viewModel::grantConsent,
+                )
+            }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Home(
     ui: RadioState,
@@ -114,158 +118,161 @@ private fun Home(
     viewModel: RadioViewModel,
     openSchedule: () -> Unit,
     openSettings: () -> Unit,
+    openDemo: () -> Unit,
 ) {
     val c = LocalColors.current
     val today = ui.schedule.slots(ui.today)
     val onAir = ui.schedule.categories(ui.today)
+    val weekend = onAir.isEmpty()
     val mode = if (ui.mode == ListenMode.ON_ROUTE) "내 경로 지역의 소식" else "저장된 경로의 소식"
 
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("${dayLabel(ui.today)}요일 부동산 라디오", color = c.ink, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-                Text(mode, color = c.sub, fontSize = 20.sp)
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            PageNavigation(
+                title = "${dayLabel(ui.today)}요일 부동산 라디오",
+                subtitle = if (weekend) "오늘은 쉬는 날이에요" else mode,
+            ) {
+                PleosIconButton(PleosIcons.schedule, "편성표", openSchedule, enabled = !setupBlocked)
+                PleosIconButton(PleosIcons.settings, "설정", openSettings, enabled = !setupBlocked)
             }
-            CircleIconButton(Icons.Rounded.CalendarViewWeek, "편성표", 72.dp, c.surface, c.ink, enabled = !setupBlocked, onClick = openSchedule)
-            Spacer(Modifier.width(12.dp))
-            CircleIconButton(Icons.Rounded.Settings, "설정", 72.dp, c.surface, c.ink, enabled = !setupBlocked, onClick = openSettings)
+            Column(
+                Modifier.weight(1f).fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 8.dp, bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(32.dp),
+            ) {
+                if (weekend) {
+                    Text("듣고 싶은 소식을 골라 보세요", style = PleosType.TitleS, color = c.ink)
+                    val perRow = if (wide) 5 else 2
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                        Category.entries.chunked(perRow).forEach { row ->
+                            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                row.forEach { category ->
+                                    CategoryTile(
+                                        category,
+                                        Modifier.weight(1f).fillMaxHeight().clickable(enabled = ui.consent && !ui.preparing) { viewModel.start(category) },
+                                        label = category.label,
+                                        artwork = category.artwork,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    val cards: @Composable (Modifier) -> Unit = { modifier ->
+                        today.forEachIndexed { index, category ->
+                            if (category != null) ProgramCard(index + 1, category, modifier)
+                        }
+                    }
+                    if (wide) {
+                        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                            cards(Modifier.weight(1f).fillMaxHeight())
+                        }
+                    } else {
+                        Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                            cards(Modifier.weight(1f).fillMaxWidth())
+                        }
+                    }
+                    if (ui.regions.isNotEmpty()) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("오늘 경로", Modifier.align(Alignment.CenterVertically), style = PleosType.LabelMStrong, color = c.faint)
+                            ui.regions.map(::shortName).distinct().forEach { RegionChip(it) }
+                        }
+                    }
+                    PleosButton(
+                        text = if (ui.preparing) "경로의 소식을 모으는 중이에요" else "오늘 방송 듣기",
+                        onClick = { viewModel.start() },
+                        modifier = Modifier.fillMaxWidth(),
+                        hierarchy = Hierarchy.Secondary,
+                        icon = PleosIcons.play,
+                        enabled = ui.consent,
+                        loading = ui.preparing,
+                    )
+                }
+                WeekStrip(ui, wide, Modifier.clickable(remember { MutableInteractionSource() }, null, enabled = !setupBlocked, onClick = openSchedule)) {
+                    PleosTextButton("시연 주행", openDemo, enabled = ui.consent && !ui.preparing)
+                }
+            }
         }
 
         val notice = when {
             ttsFailed -> "음성 엔진을 시작하지 못했어요"
             ui.status != null && !ui.preparing -> ui.status
             finished -> "오늘 방송을 모두 들었어요"
+            setupBlocked && ui.consent -> "주행 중에는 편성표와 설정을 열 수 없어요"
             else -> null
         }
-        notice?.let { Text(it, color = c.accent, fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
-
-        if (onAir.isEmpty()) {
-            Text("오늘은 쉬는 날이에요. 듣고 싶은 소식을 골라 보세요.", color = c.ink, fontSize = 24.sp)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Category.entries.chunked(5).forEach { row ->
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        row.forEach { category ->
-                            CategoryTile(category, Modifier.weight(1f).fillMaxHeight().clickable(enabled = !ui.preparing) { viewModel.start(category) })
-                        }
-                    }
-                }
-            }
-        } else {
-            val cards: @Composable (Modifier) -> Unit = { modifier ->
-                today.forEachIndexed { index, category ->
-                    if (category != null) ProgramCard(index + 1, category, modifier)
-                }
-            }
-            if (wide) {
-                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    cards(Modifier.weight(1f).fillMaxHeight())
-                }
-            } else {
-                Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    cards(Modifier.weight(1f).fillMaxWidth())
-                }
-            }
-            ListenBar(ui.preparing, enabled = ui.consent && !ui.preparing) { viewModel.start() }
-        }
-
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            WeekStrip(ui, Modifier.weight(1f).clickable(enabled = !setupBlocked, onClick = openSchedule))
-            Box(
-                Modifier
-                    .height(72.dp)
-                    .clip(RoundedCornerShape(36.dp))
-                    .clickable(enabled = ui.consent && !ui.preparing) { viewModel.startDemo() }
-                    .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("시연 주행", color = c.sub, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
+        notice?.let { PleosToast(it, if (setupBlocked && it.startsWith("주행")) PleosIcons.lock else PleosIcons.info) }
     }
 }
 
 @Composable
-private fun ProgramCard(part: Int, category: Category, modifier: Modifier) {
-    Column(
-        modifier.clip(RoundedCornerShape(28.dp)).background(category.color).padding(28.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${part}부", Modifier.weight(1f), color = Color.White.copy(alpha = 0.9f), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-            Icon(category.icon, null, Modifier.size(64.dp), tint = Color.White)
-        }
-        Column {
-            Text(category.label, color = Color.White, fontSize = 34.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (!category.live) Text("예시 데이터", color = Color.White.copy(alpha = 0.9f), fontSize = 20.sp)
-        }
-    }
-}
-
-@Composable
-private fun ListenBar(preparing: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val c = LocalColors.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(100.dp)
-            .clip(RoundedCornerShape(50.dp))
-            .background(c.ink)
-            .clickable(enabled = enabled, onClick = onClick),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (!preparing) Icon(Icons.Rounded.PlayArrow, null, Modifier.size(52.dp), tint = c.onInk)
-        Spacer(Modifier.width(8.dp))
-        Text(if (preparing) "경로의 소식을 모으는 중이에요" else "오늘 방송 듣기", color = c.onInk, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun WeekStrip(ui: RadioState, modifier: Modifier) {
-    val c = LocalColors.current
-    Row(modifier.height(72.dp), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
-        weekdays.forEach { day ->
-            val isToday = day == ui.today
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(dayLabel(day), color = if (isToday) c.accent else c.sub, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                ui.schedule.slots(day).forEach { category ->
-                    Box(Modifier.size(16.dp).clip(CircleShape).background(category?.color ?: c.line))
-                }
+private fun WeekStrip(ui: RadioState, wide: Boolean, modifier: Modifier, trailing: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(if (wide) 12.dp else 4.dp)) {
+            weekdays.forEach { day ->
+                WeekDay(
+                    day = dayLabel(day),
+                    programs = ui.schedule.slots(day).filterNotNull().joinToString(" · ") { it.short },
+                    today = day == ui.today,
+                    modifier = if (wide) Modifier.width(200.dp) else Modifier.weight(1f),
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun ConsentDialog(onAgree: () -> Unit) {
-    val c = LocalColors.current
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0x99000000))
-            // Swallows touches so nothing behind the dialog can be pressed.
-            .clickable(remember { MutableInteractionSource() }, indication = null) {},
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier.widthIn(max = 640.dp).padding(24.dp).clip(RoundedCornerShape(28.dp)).background(c.surface).padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            Text("내 경로의 소식을 들으려면", color = c.ink, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "차량 위치를 V-World로 보내 지금 어느 시군구인지 확인해요. 결과는 저장하지 않고 주행 기록도 남기지 않아요.",
-                color = c.sub,
-                fontSize = 22.sp,
-                lineHeight = 32.sp,
-            )
-            Box(
-                Modifier.fillMaxWidth().height(88.dp).clip(RoundedCornerShape(44.dp)).background(c.ink).clickable(onClick = onAgree),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("동의하고 시작", color = c.onInk, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            }
+        if (wide) {
+            Spacer(Modifier.padding(8.dp))
+            trailing()
         }
     }
 }
 
 internal val weekdays get() = ai.bureadcar.app.schedule.WEEKDAYS
+
+/**
+ * Asks which weekday the demo drive plays, so the audience knows what they will hear on any day.
+ * A day with no programs cannot be picked.
+ */
+@Composable
+private fun DemoDayPopup(ui: RadioState, onPick: (DayOfWeek) -> Unit, onCancel: () -> Unit) {
+    val c = LocalColors.current
+    PopupFrame(
+        title = "어느 요일 방송으로 시연할까요?",
+        description = "고른 요일의 1부와 2부를 내비게이션이나 저장된 경로를 따라 들려 드려요. 따라갈 경로가 없으면 시연 경로로 대신해요.",
+        maxWidth = 1080.dp,
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            weekdays.forEach { day ->
+                val programs = ui.schedule.categories(day)
+                val enabled = programs.isNotEmpty()
+                val shape = RoundedCornerShape(24.dp)
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 144.dp)
+                        .clip(shape)
+                        .background(if (day == ui.today) c.filledEnabled else c.basicEnabled)
+                        .clickable(enabled = enabled) { onPick(day) }
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+                ) {
+                    val onToday = day == ui.today
+                    Text(
+                        "${dayLabel(day)}요일",
+                        style = PleosType.BodyLStrong,
+                        color = when {
+                            !enabled -> c.off
+                            onToday -> c.onFilled[0]
+                            else -> c.ink
+                        },
+                    )
+                    Text(
+                        if (enabled) programs.joinToString(" · ") { it.short } else "편성 없음",
+                        style = PleosType.LabelM,
+                        color = if (onToday) c.onFilled[1] else c.faint,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+        PleosButton("취소", onCancel, Modifier.fillMaxWidth())
+    }
+}

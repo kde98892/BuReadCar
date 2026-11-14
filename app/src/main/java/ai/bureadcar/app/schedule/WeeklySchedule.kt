@@ -46,13 +46,18 @@ data class WeeklySchedule(val days: Map<DayOfWeek, List<Category?>>) {
     }.toString()
 
     companion object {
+        /**
+         * 1부 holds the five categories with the most news (district data or weekly releases);
+         * 2부 pairs each with a sparser one so no day runs short. Friday gets the price index,
+         * which R-ONE publishes on Thursdays.
+         */
         val DEFAULT = WeeklySchedule(
             mapOf(
-                DayOfWeek.MONDAY to listOf(SUBSCRIPTION, UNSOLD),
-                DayOfWeek.TUESDAY to listOf(PRICE_INDEX, TRADE),
-                DayOfWeek.WEDNESDAY to listOf(TRANSPORT, DEVELOPMENT),
-                DayOfWeek.THURSDAY to listOf(REDEVELOPMENT, RENT),
-                DayOfWeek.FRIDAY to listOf(POLICY, RATE),
+                DayOfWeek.MONDAY to listOf(SUBSCRIPTION, POLICY),
+                DayOfWeek.TUESDAY to listOf(TRADE, UNSOLD),
+                DayOfWeek.WEDNESDAY to listOf(RENT, REDEVELOPMENT),
+                DayOfWeek.THURSDAY to listOf(TRANSPORT, RATE),
+                DayOfWeek.FRIDAY to listOf(PRICE_INDEX, DEVELOPMENT),
             ),
         )
 

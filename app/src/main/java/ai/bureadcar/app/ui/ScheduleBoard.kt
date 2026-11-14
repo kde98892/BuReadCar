@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,13 +17,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,42 +31,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 private typealias SlotId = Pair<DayOfWeek, Int>
 
-private val DragSize = 120.dp
+private enum class SlotState { Empty, Filled, Target, Invalid }
 
-/** A colored program box with its icon and short name. */
+/** Weekdays across, 1부 and 2부 down; program boxes are dragged in, between, and out. */
 @Composable
-internal fun CategoryTile(category: Category, modifier: Modifier) {
-    Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(category.color).padding(6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(category.icon, null, Modifier.size(40.dp), tint = Color.White)
-        Text(category.short, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-/** A TV-style grid: weekdays across, 1부 and 2부 down, program boxes dragged into place. */
-@Composable
-internal fun ScheduleBoard(ui: RadioState, viewModel: RadioViewModel, onBack: () -> Unit) {
+internal fun ScheduleBoard(ui: RadioState, viewModel: RadioViewModel, wide: Boolean, onBack: () -> Unit) {
     val c = LocalColors.current
     val slotBounds = remember { mutableStateMapOf<SlotId, Rect>() }
     var dragging by remember { mutableStateOf<Category?>(null) }
@@ -76,6 +60,17 @@ internal fun ScheduleBoard(ui: RadioState, viewModel: RadioViewModel, onBack: ()
     var pointer by remember { mutableStateOf(Offset.Zero) }
     var origin by remember { mutableStateOf(Offset.Zero) }
     var message by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(message) {
+        if (message != null) {
+            delay(3_000)
+            message = null
+        }
+    }
+
+    /** Placing [category] at [id] would repeat it on that day. */
+    fun repeats(category: Category, id: SlotId): Boolean =
+        ui.schedule.slots(id.first).withIndex().any { (i, other) -> i != id.second && other == category && (id.first to i) != source }
 
     fun begin(category: Category, from: SlotId?, at: Offset) {
         dragging = category
@@ -101,85 +96,90 @@ internal fun ScheduleBoard(ui: RadioState, viewModel: RadioViewModel, onBack: ()
         if (!placed) message = "같은 요일에 같은 소식은 넣을 수 없어요"
     }
 
+    fun cancel() {
+        dragging = null
+        source = null
+    }
+
+    val labelWidth = if (wide) 96.dp else 64.dp
     Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
-        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, "뒤로", 72.dp, c.surface, c.ink, onClick = onBack)
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text("이번 주 편성표", color = c.ink, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text(message ?: "박스를 끌어서 놓으세요. 빼려면 칸 밖으로 끌어내세요", color = if (message != null) c.accent else c.sub, fontSize = 20.sp)
-                }
-            }
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Spacer(Modifier.width(52.dp))
-                weekdays.forEach { day ->
-                    Text(
-                        dayLabel(day),
-                        Modifier.weight(1f).padding(vertical = 2.dp),
-                        color = if (day == ui.today) c.accent else c.ink,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    )
-                }
-            }
-
-            repeat(SLOTS_PER_DAY) { slot ->
-                Row(
-                    Modifier.weight(1f).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("${slot + 1}부", Modifier.width(52.dp), color = c.sub, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-                    weekdays.forEach { day ->
-                        val id = day to slot
-                        Slot(
-                            category = ui.schedule.slots(day)[slot],
-                            highlighted = dragging != null && slotBounds[id]?.contains(pointer) == true,
-                            hidden = source == id,
-                            modifier = Modifier.weight(1f).fillMaxHeight().onGloballyPositioned {
-                                slotBounds[id] = it.boundsInRoot()
-                            },
-                            onDragStart = { category, at -> begin(category, id, at) },
-                            onMove = { pointer += it },
-                            onDrop = ::drop,
-                            onCancel = {
-                                dragging = null
-                                source = null
-                            },
-                        )
+        Column(Modifier.fillMaxSize()) {
+            PageNavigation("이번 주 편성표", "박스를 끌어서 놓으세요. 빼려면 칸 밖으로 끌어내세요", onBack = onBack)
+            Column(
+                Modifier.weight(1f).fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 8.dp, bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(labelWidth))
+                        weekdays.forEach { day ->
+                            val today = day == ui.today
+                            Box(
+                                Modifier.weight(1f).height(64.dp).clip(CircleShape).background(if (today) c.filledEnabled else c.surfaceLow),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(dayLabel(day), style = PleosType.BodyLStrong, color = if (today) c.onFilled[0] else c.ink, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                    repeat(SLOTS_PER_DAY) { slot ->
+                        Row(
+                            Modifier.weight(1f).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("${slot + 1}부", Modifier.width(labelWidth), style = PleosType.BodyMStrong, color = c.sub)
+                            weekdays.forEach { day ->
+                                val id = day to slot
+                                val hovered = dragging != null && slotBounds[id]?.contains(pointer) == true
+                                val category = ui.schedule.slots(day)[slot]
+                                val state = when {
+                                    hovered && repeats(dragging!!, id) -> SlotState.Invalid
+                                    hovered -> SlotState.Target
+                                    category == null || source == id -> SlotState.Empty
+                                    else -> SlotState.Filled
+                                }
+                                Slot(
+                                    category = category,
+                                    state = state,
+                                    modifier = Modifier.weight(1f).fillMaxHeight().onGloballyPositioned { slotBounds[id] = it.boundsInRoot() },
+                                    onDragStart = { cat, at -> begin(cat, id, at) },
+                                    onMove = { pointer += it },
+                                    onDrop = ::drop,
+                                    onCancel = ::cancel,
+                                )
+                            }
+                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(2.dp))
-            Category.entries.chunked(5).forEach { row ->
-                Row(Modifier.fillMaxWidth().height(92.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { category ->
-                        var tileOrigin by remember { mutableStateOf(Offset.Zero) }
-                        CategoryTile(
-                            category,
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .onGloballyPositioned { tileOrigin = it.positionInRoot() }
-                                .pointerInput(category) {
-                                    detectDragGestures(
-                                        onDragStart = { begin(category, null, tileOrigin + it) },
-                                        onDrag = { change, delta ->
-                                            change.consume()
-                                            pointer += delta
+                Text("소식 박스", style = PleosType.LabelMStrong, color = c.faint)
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Category.entries.chunked(if (wide) 10 else 5).forEach { row ->
+                        Row(Modifier.fillMaxWidth().height(if (wide) 112.dp else 104.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            row.forEach { category ->
+                                var tileOrigin by remember { mutableStateOf(Offset.Zero) }
+                                CategoryTile(
+                                    category,
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .onGloballyPositioned { tileOrigin = it.positionInRoot() }
+                                        .pointerInput(category) {
+                                            detectDragGestures(
+                                                onDragStart = { begin(category, null, tileOrigin + it) },
+                                                onDrag = { change, delta ->
+                                                    change.consume()
+                                                    pointer += delta
+                                                },
+                                                onDragEnd = ::drop,
+                                                onDragCancel = ::cancel,
+                                            )
                                         },
-                                        onDragEnd = ::drop,
-                                        onDragCancel = {
-                                            dragging = null
-                                            source = null
-                                        },
-                                    )
-                                },
-                        )
+                                    picture = false,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -191,17 +191,23 @@ internal fun ScheduleBoard(ui: RadioState, viewModel: RadioViewModel, onBack: ()
                 category,
                 Modifier
                     .offset { IntOffset((pointer.x - origin.x).roundToInt() - half, (pointer.y - origin.y).roundToInt() - half) }
-                    .size(DragSize),
+                    .size(DragSize)
+                    .rotate(-4f),
+                state = TileState.Dragging,
+                picture = false,
             )
         }
+
+        message?.let { PleosToast(it, PleosIcons.info) }
     }
 }
+
+private val DragSize = 160.dp
 
 @Composable
 private fun Slot(
     category: Category?,
-    highlighted: Boolean,
-    hidden: Boolean,
+    state: SlotState,
     modifier: Modifier,
     onDragStart: (Category, Offset) -> Unit,
     onMove: (Offset) -> Unit,
@@ -210,19 +216,17 @@ private fun Slot(
 ) {
     val c = LocalColors.current
     var slotOrigin by remember { mutableStateOf(Offset.Zero) }
-    Box(
-        modifier
-            .onGloballyPositioned { slotOrigin = it.positionInRoot() }
-            .clip(RoundedCornerShape(18.dp))
-            .background(c.raised)
-            .border(if (highlighted) 4.dp else 0.dp, if (highlighted) c.accent else Color.Transparent, RoundedCornerShape(18.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (category == null || hidden) {
-            Icon(Icons.Rounded.Add, "비어 있음", Modifier.size(36.dp), tint = c.sub)
-        } else {
-            CategoryTile(
-                category,
+    val shape = RoundedCornerShape(24.dp)
+    val framed = when (state) {
+        SlotState.Empty -> modifier.dashedBorder(c.lineStrong, 24.dp)
+        SlotState.Target -> modifier.clip(shape).background(c.basicEnabled).border(4.dp, c.positive, shape)
+        SlotState.Invalid -> modifier.clip(shape).background(c.basicEnabled).border(4.dp, c.negative, shape)
+        SlotState.Filled -> modifier
+    }
+    Box(framed.onGloballyPositioned { slotOrigin = it.positionInRoot() }, contentAlignment = Alignment.Center) {
+        when (state) {
+            SlotState.Filled -> CategoryTile(
+                category!!,
                 Modifier.fillMaxSize().pointerInput(category) {
                     detectDragGestures(
                         onDragStart = { onDragStart(category, slotOrigin + it) },
@@ -235,6 +239,11 @@ private fun Slot(
                     )
                 },
             )
+            SlotState.Invalid -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(PleosIcons.close, null, Modifier.size(40.dp), tint = c.negative)
+                Text("이미 있어요", style = PleosType.LabelMStrong, color = c.negative)
+            }
+            else -> Icon(PleosIcons.add, "비어 있음", Modifier.size(40.dp), tint = if (state == SlotState.Target) c.positive else c.faint)
         }
     }
 }
