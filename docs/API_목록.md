@@ -70,7 +70,7 @@
 | 보도자료 목록 (제목, 분야, 등록일) | `https://www.molit.go.kr/USR/NEWS/m_71/lst.jsp` | `lcmspage` (1쪽에 10건) | 호출 성공 |
 | 최신 보도자료 10건 (목록을 못 읽을 때) | `https://www.molit.go.kr/dev/board/board_rss.jsp?rss_id=NEWS` | 없음 | 호출 성공 |
 
-- 최근 31일 글을 최대 10쪽까지 읽고 30분 동안 다시 쓴다.
+- 최근 31일 글을 최대 10쪽까지 읽고 1시간 동안 다시 쓴다. 앱을 켜면 미리 받아 둔다.
 - 본문: 방송에서 읽는 글만 상세 페이지(`dtl.jsp?id=`)에서 첨부한 보도자료 hwpx를 받아 `Contents/section0.xml`의 "□" 문단 첫 문장을 최대 3개 읽는다. 받지 못하면 제목만 읽는다. 한 문서는 20MB까지만 받는다.
 - 저작권: 국토교통부 보도자료 저작물은 공공누리 공공저작물 자유이용허락에 따라 누구나 이용할 수 있다.
 - 인증서: `*.molit.go.kr`은 OISTE WISeKey Global Root GB CA 체인이다. Android 14 시스템 인증서 저장소(`dfc0fe80.0`)에 있다.
