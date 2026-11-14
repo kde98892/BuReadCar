@@ -2,6 +2,7 @@ package ai.bureadcar.app.ui
 
 import ai.bureadcar.app.R
 import ai.bureadcar.app.model.Category
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
@@ -11,9 +12,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +28,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -41,12 +45,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
@@ -348,6 +354,22 @@ fun SystemPopup(
     cancel: String? = null,
     onCancel: () -> Unit = {},
 ) {
+    PopupFrame(title, description) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            PleosButton(confirm, onConfirm, Modifier.weight(1f), Hierarchy.Secondary)
+            cancel?.let { PleosButton(it, onCancel, Modifier.weight(1f)) }
+        }
+    }
+}
+
+/** Dimmed backdrop and the popup card with a centered title and description above [content]. */
+@Composable
+fun PopupFrame(
+    title: String,
+    description: String,
+    maxWidth: Dp = 808.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val c = LocalColors.current
     Box(
         Modifier.fillMaxSize().background(c.overlay)
@@ -357,7 +379,7 @@ fun SystemPopup(
     ) {
         val shape = RoundedCornerShape(48.dp)
         Column(
-            Modifier.padding(24.dp).widthIn(max = 808.dp).elevation(3, shape).clip(shape)
+            Modifier.padding(24.dp).widthIn(max = maxWidth).elevation(3, shape).clip(shape)
                 .background(c.popup).border(2.dp, c.basicEnabled, shape).padding(48.dp),
             verticalArrangement = Arrangement.spacedBy(48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -366,39 +388,49 @@ fun SystemPopup(
                 Text(title, style = PleosType.TitleM, color = c.ink, textAlign = TextAlign.Center)
                 Text(description, style = PleosType.BodyL, color = c.sub, textAlign = TextAlign.Center, maxLines = 3)
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                PleosButton(confirm, onConfirm, Modifier.weight(1f), Hierarchy.Secondary)
-                cancel?.let { PleosButton(it, onCancel, Modifier.weight(1f)) }
-            }
+            content()
         }
     }
 }
 
-/** Today's program: a monochrome card told apart by icon and name; shows live or sample data. */
+/** Today's program: the category's photo with its name over a fade of the card color. */
 @Composable
 fun ProgramCard(part: Int, category: Category, modifier: Modifier = Modifier) {
     val c = LocalColors.current
     val shape = RoundedCornerShape(32.dp)
-    Column(
-        modifier.elevation(1, shape).clip(shape).background(c.surfaceBasic).padding(40.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Box(modifier.elevation(1, shape).clip(shape).background(c.surfaceBasic)) {
+        // Each photo keeps its subject on the right, so cropping starts from the right edge.
+        Image(
+            painterResource(category.backdrop),
+            null,
+            Modifier.matchParentSize(),
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.CenterEnd,
+        )
+        if (c.dark) Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.45f)))
+        // The card color fades in toward the text so it keeps 4.5:1 contrast on any photo.
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.horizontalGradient(0f to c.surfaceBasic.copy(alpha = 0.92f), 0.6f to c.surfaceBasic.copy(alpha = 0f)),
+            ),
+        )
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(0.4f to c.surfaceBasic.copy(alpha = 0f), 1f to c.surfaceBasic.copy(alpha = 0.88f)),
+            ),
+        )
+        Column(Modifier.matchParentSize().padding(40.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(
                 "${part}부",
-                Modifier.clip(RoundedCornerShape(16.dp)).background(c.basicEnabled).padding(horizontal = 16.dp, vertical = 8.dp),
+                Modifier.clip(RoundedCornerShape(16.dp)).background(c.surfaceBasic.copy(alpha = 0.88f)).padding(horizontal = 16.dp, vertical = 8.dp),
                 style = PleosType.LabelMStrong,
                 color = c.sub,
             )
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.size(112.dp).clip(CircleShape).background(c.basicEnabled), contentAlignment = Alignment.Center) {
-                Icon(category.icon, null, Modifier.size(64.dp), tint = c.ink)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(category.label, style = PleosType.HeadlineS, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(category.blurb, style = PleosType.BodyM, color = c.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                DataBadge(live = true)
             }
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(category.label, style = PleosType.HeadlineS, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(category.blurb, style = PleosType.BodyM, color = c.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            DataBadge(category.live)
         }
     }
 }
@@ -422,9 +454,19 @@ fun DataBadge(live: Boolean, source: String? = null) {
 
 enum class TileState { Default, Dragging, Disabled }
 
-/** A program box for the schedule: icon and short name. */
+/**
+ * A program tile: clay art (or the icon when there is none) and its name, over the program's hue.
+ * [picture] false leaves only the name, as on the schedule's small news boxes.
+ */
 @Composable
-fun CategoryTile(category: Category, modifier: Modifier = Modifier, label: String = category.short, state: TileState = TileState.Default) {
+fun CategoryTile(
+    category: Category,
+    modifier: Modifier = Modifier,
+    label: String = category.short,
+    state: TileState = TileState.Default,
+    @DrawableRes artwork: Int? = category.artwork,
+    picture: Boolean = true,
+) {
     val c = LocalColors.current
     val shape = RoundedCornerShape(24.dp)
     val off = state == TileState.Disabled
@@ -433,15 +475,38 @@ fun CategoryTile(category: Category, modifier: Modifier = Modifier, label: Strin
         TileState.Disabled -> modifier.clip(shape).background(c.basicEnabled)
         TileState.Default -> modifier.clip(shape).background(c.surfaceBasic).border(2.dp, c.basicEnabled, shape)
     }
+    // A faint wash of the program's own hue, so a box looks the same on the weekend grid, the schedule
+    // and while dragged. Disabled boxes stay grey.
+    val tinted = if (state != TileState.Disabled) {
+        base.background(category.hue.copy(alpha = if (c.dark) TILE_WASH_DARK else TILE_WASH_LIGHT))
+    } else {
+        base
+    }
     Column(
-        base.padding(16.dp),
+        tinted.padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
     ) {
-        Icon(category.icon, null, Modifier.size(40.dp), tint = if (off) c.off else c.ink)
+        when {
+            !picture -> Unit
+            // 200 dp on the big tiles; on the schedule's cells it shrinks to the room left above the label.
+            artwork != null -> Image(
+                painterResource(artwork),
+                null,
+                Modifier
+                    .weight(1f, fill = false)
+                    .sizeIn(maxWidth = 200.dp, maxHeight = 200.dp)
+                    .aspectRatio(1f, matchHeightConstraintsFirst = true),
+                alpha = if (off) 0.4f else 1f,
+            )
+            else -> Icon(category.icon, null, Modifier.size(40.dp), tint = if (off) c.off else c.ink)
+        }
         Text(label, style = PleosType.LabelMStrong, color = if (off) c.off else c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
+
+private const val TILE_WASH_LIGHT = 0.10f
+private const val TILE_WASH_DARK = 0.16f
 
 enum class ChipState { Default, Current, Passed }
 
@@ -497,6 +562,6 @@ fun WeekDay(day: String, programs: String, today: Boolean, modifier: Modifier = 
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(day, style = PleosType.BodyLStrong, color = if (today) c.onFilled[0] else c.ink)
-        Text(programs, style = PleosType.LabelM, color = if (today) c.onFilled[1] else c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(programs, style = PleosType.LabelM, color = if (today) c.onFilled[1] else c.faint, textAlign = TextAlign.Center)
     }
 }

@@ -185,3 +185,51 @@ val Category.blurb: String
         Category.RATE -> "기준금리와 주택담보대출 금리"
         Category.UNSOLD -> "미분양과 입주 예정 물량"
     }
+
+/**
+ * Each program's own hue, washed faintly behind its clay art on the weekend tiles. Neighbours in the
+ * 5 × 2 grid get different hues: blue, mint, peach, violet, aqua over yellow, coral, indigo, lime, pink.
+ */
+val Category.hue: Color
+    get() = when (this) {
+        Category.SUBSCRIPTION -> Color(0xFF3D8BFF)
+        Category.PRICE_INDEX -> Color(0xFF1DB87A)
+        Category.TRADE -> Color(0xFFFF8A4C)
+        Category.RENT -> Color(0xFF8B6CFF)
+        Category.TRANSPORT -> Color(0xFF14B3C7)
+        Category.DEVELOPMENT -> Color(0xFFF5B400)
+        Category.REDEVELOPMENT -> Color(0xFFFF6B6B)
+        Category.POLICY -> Color(0xFF5B6CF0)
+        Category.RATE -> Color(0xFF7DBB2E)
+        Category.UNSOLD -> Color(0xFFF06AA8)
+    }
+
+/** Clay object for the weekend tiles (transparent background). */
+val Category.artwork: Int
+    get() = when (this) {
+        Category.SUBSCRIPTION -> R.drawable.art_subscription
+        Category.PRICE_INDEX -> R.drawable.art_price_index
+        Category.TRADE -> R.drawable.art_trade
+        Category.RENT -> R.drawable.art_rent
+        Category.TRANSPORT -> R.drawable.art_transport
+        Category.DEVELOPMENT -> R.drawable.art_development
+        Category.REDEVELOPMENT -> R.drawable.art_redevelopment
+        Category.POLICY -> R.drawable.art_policy
+        Category.RATE -> R.drawable.art_rate
+        Category.UNSOLD -> R.drawable.art_unsold
+    }
+
+/** Photo for today's program cards: subject on the right, open sky on the left for text. */
+val Category.backdrop: Int
+    get() = when (this) {
+        Category.SUBSCRIPTION -> R.drawable.bg_subscription
+        Category.PRICE_INDEX -> R.drawable.bg_price_index
+        Category.TRADE -> R.drawable.bg_trade
+        Category.RENT -> R.drawable.bg_rent
+        Category.TRANSPORT -> R.drawable.bg_transport
+        Category.DEVELOPMENT -> R.drawable.bg_development
+        Category.REDEVELOPMENT -> R.drawable.bg_redevelopment
+        Category.POLICY -> R.drawable.bg_policy
+        Category.RATE -> R.drawable.bg_rate
+        Category.UNSOLD -> R.drawable.bg_unsold
+    }

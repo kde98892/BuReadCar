@@ -176,6 +176,7 @@ internal fun ScheduleBoard(ui: RadioState, viewModel: RadioViewModel, wide: Bool
                                                 onDragCancel = ::cancel,
                                             )
                                         },
+                                    picture = false,
                                 )
                             }
                         }
@@ -193,6 +194,7 @@ internal fun ScheduleBoard(ui: RadioState, viewModel: RadioViewModel, wide: Bool
                     .size(DragSize)
                     .rotate(-4f),
                 state = TileState.Dragging,
+                picture = false,
             )
         }
 
