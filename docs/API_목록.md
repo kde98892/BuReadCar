@@ -2,7 +2,7 @@
 
 작성일: 2026-11-09 · 갱신: 2026-11-15 (`feature/app-v1` 코드 기준)
 
-인증키 값은 이 문서에 적지 않는다. 프로젝트 루트의 `local.properties`에 아래 이름으로 넣으면 빌드할 때 `BuildConfig`로 들어간다. 심사 환경 재현을 위해 지금은 이 파일을 저장소에 포함했다. 앱이 API를 직접 부르므로 APK에도 키가 들어간다.
+인증키 값은 이 문서에 적지 않는다. 프로젝트 루트의 `api.properties`에 아래 이름으로 넣으면 빌드할 때 `BuildConfig`로 들어간다. 심사 환경 재현을 위해 이 파일은 저장소에 포함한다. PC별 SDK 경로(`sdk.dir`)는 Git에서 제외한 `local.properties`에 설정한다. 앱이 API를 직접 부르므로 APK에도 키가 들어간다.
 
 | 키 이름 | 발급처 | 쓰는 API |
 | --- | --- | --- |
@@ -47,6 +47,7 @@
 - 공고는 시도별로 받고 공급 주소(`HSSPLY_ADRES`)로 시군구를 거른다.
 - 주택형은 방송에서 읽을 공고(이번 주·다음 주 각 최대 2건)만 받는다. 실패하면 주택형 없이 읽는다.
 - 경쟁률은 이번 주·다음 주 공고가 없을 때, 최근 30일 안에 마감한 공고만 조회한다.
+- 경로 지역 전체에서 공고·경쟁률 소식을 얻지 못하면 목적지가 속한 시도 범위의 이번 주·다음 주 공고로 조회 범위를 넓힌다. 이 경우 시도 소식임을 안내하며 시군구 소식과 분리해 경로 소식 뒤에 읽는다.
 
 - 데이터 안내: [청약 접수 경쟁률 조회 서비스](https://www.data.go.kr/data/15098905/openapi.do)
 
@@ -115,5 +116,7 @@
 | AAOS CarUxRestrictions | `android.car`, `CarUxRestrictionsManager` | 없음 | [주행 규제 개발 가이드](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/driving-restriction-development-guide) |
 | AAOS 전원 정책 | `android.car`, `CarPowerManager` (오디오 전원) | `android.car.permission.READ_CAR_POWER_POLICY` | - |
 | Android 오디오 포커스 | `AudioManager`, `AudioFocusRequest` (`AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, `USAGE_MEDIA`) | 없음 | [오디오 포커스 개발 가이드](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/audio-focus-development-guide/audio-focus-development) |
+
+- 경유지 좌표가 없거나 유효하지 않으면 최근 목적지 정보를 요청해 최대 8초 기다린다. `poiId`가 비어 있지 않고 경유지 목록에서 중복되지 않으며 `poiId`·`poiProvider`·`poiSubId`가 모두 같은 최근 목적지 항목이 하나뿐일 때만 유효한 좌표를 복원한다.
 
 Maven 저장소: `https://nexus-playground.pleos.ai/repository/maven-releases/`

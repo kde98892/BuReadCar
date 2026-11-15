@@ -7,7 +7,7 @@ plugins {
 }
 
 val secrets = Properties().apply {
-    val file = rootProject.file("local.properties")
+    val file = rootProject.file("api.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
