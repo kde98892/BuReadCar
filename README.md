@@ -181,7 +181,6 @@ app/build/outputs/apk/debug/app-debug.apk
 
 - [서비스 설계](docs/부읽카_설계.md)
 - [API 목록](docs/API_목록.md)
-- [참고한 경유지 좌표 누락 및 복원 사례](https://github.com/majung-team/majung/wiki/Pleos-내비가-경유지-좌표-0을-돌려줄-때-경로는-어떻게-지킬까)
 
 ---
 
