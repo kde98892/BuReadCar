@@ -37,17 +37,17 @@ class BriefingBuilderTest {
 
     @Test fun `each district reads both programs before the next district`() {
         val segments = build(
-            Fake(Category.SUBSCRIPTION) { regions -> regions.map { RegionNews(it, "${it.sigungu} 분양.") } },
-            Fake(Category.UNSOLD) { regions -> regions.map { RegionNews(it, "${it.sigungu} 미분양.") } },
+            Fake(Category.SUBSCRIPTION) { regions -> regions.map { RegionNews(it, "${it.displayName} 분양.") } },
+            Fake(Category.UNSOLD) { regions -> regions.map { RegionNews(it, "${it.displayName} 미분양.") } },
         )
         val texts = segments.map { it.text }
         assertEquals("부.읽.카입니다. 참고용 정보이며 투자 권유가 아닙니다. 오늘은 월요일 분양·청약과 미분양·입주물량 소식입니다.", texts[0])
         assertEquals(
             listOf(
-                "성남시 분당구 소식입니다. 먼저 분양·청약입니다. 성남시 분당구 분양.",
-                "이어서 미분양·입주물량입니다. 성남시 분당구 미분양.",
-                "강남구 소식입니다. 먼저 분양·청약입니다. 강남구 분양.",
-                "이어서 미분양·입주물량입니다. 강남구 미분양.",
+                "성남 분당구 소식입니다. 먼저 분양·청약입니다. 성남 분당구 분양.",
+                "이어서 미분양·입주물량입니다. 성남 분당구 미분양.",
+                "서울 강남구 소식입니다. 먼저 분양·청약입니다. 서울 강남구 분양.",
+                "이어서 미분양·입주물량입니다. 서울 강남구 미분양.",
             ),
             texts.subList(1, 5),
         )
@@ -61,14 +61,14 @@ class BriefingBuilderTest {
         )
         assertEquals(
             listOf(
-                "성남시 분당구 소식입니다. 먼저 주택가격지수·증감률입니다. 분당구 지수.",
-                "이어서 교통 호재입니다. 성남시 분당구에는 이번 주 새 소식이 없습니다.",
-                "강남구 소식입니다. 먼저 주택가격지수·증감률입니다. 강남구 지수.",
+                "성남 분당구 소식입니다. 먼저 주택가격지수·증감률입니다. 분당구 지수.",
+                "이어서 교통 호재입니다. 성남 분당구에는 이번 주 새 소식이 없습니다.",
+                "서울 강남구 소식입니다. 먼저 주택가격지수·증감률입니다. 강남구 지수.",
                 "이어서 교통 호재입니다. 서울 교통.",
             ),
             segments.map { it.text }.subList(1, 5),
         )
-        assertEquals(listOf("분당구", "분당구", "강남구", "강남구"), segments.subList(1, 5).map { it.region })
+        assertEquals(listOf("성남 분당구", "성남 분당구", "서울 강남구", "서울 강남구"), segments.subList(1, 5).map { it.region })
     }
 
     @Test fun `news without a district follows the route and empty programs are noted`() {
@@ -88,8 +88,23 @@ class BriefingBuilderTest {
             Fake(Category.TRADE) { throw IOException("down") },
         )
         val texts = segments.map { it.text }
-        assertTrue(texts.toString(), "강남구 분양·청약 소식입니다. 강남 공고." in texts)
+        assertTrue(texts.toString(), "서울 강남구 분양·청약 소식입니다. 강남 공고." in texts)
         assertTrue(texts.toString(), "실거래가·신고가는 소식을 불러오지 못해 건너뜁니다." in texts)
+    }
+
+    @Test fun `a district with no news says which programs were empty and which failed`() {
+        val segments = build(
+            Fake(Category.SUBSCRIPTION) { listOf(RegionNews(gangnam, "강남 공고.")) },
+            Fake(Category.TRADE) { throw IOException("down") },
+        )
+        val notice = segments.single { it.region == "성남 분당구" }
+        assertEquals("지역 소식 안내", notice.title)
+        assertEquals(
+            "성남 분당구에는 분양·청약의 이번 주 새 지역 소식이 없습니다. 성남 분당구의 실거래가·신고가 소식을 불러오지 못했습니다.",
+            notice.text,
+        )
+        // Kept even when the trip is short.
+        assertEquals(null, notice.priority)
     }
 
     @Test fun `trimming keeps a district's opening line`() {
@@ -112,12 +127,12 @@ class BriefingBuilderTest {
         val segments = runBlocking { builder.forPassing(listOf(Category.PRICE_INDEX, Category.TRANSPORT), gangdong, today) }
         assertEquals(
             listOf(
-                "지금 지나는 강동구 소식입니다. 먼저 주택가격지수·증감률입니다. 강동 지수.",
+                "지금 지나는 서울 강동구 소식입니다. 먼저 주택가격지수·증감률입니다. 강동 지수.",
                 "이어서 교통 호재입니다. 강동 교통.",
             ),
             segments.map { it.text },
         )
-        assertTrue(segments.all { it.passing && it.region == "강동구" })
+        assertTrue(segments.all { it.passing && it.region == "서울 강동구" })
     }
 
     @Test fun `particles follow the final consonant`() {
@@ -156,7 +171,7 @@ class BriefingBuilderTest {
         val segments = build(Fake(Category.RATE) { listOf(RegionNews(null, "금리 소식.")) }, basis = RouteBasis.Navigation)
         assertEquals(
             "부.읽.카입니다. 참고용 정보이며 투자 권유가 아닙니다. 오늘은 월요일 금리·대출 소식입니다. " +
-                "내비게이션 경로를 따라 성남시 분당구와 강남구 순서로 전해 드립니다. " +
+                "내비게이션 경로를 따라 성남 분당구와 서울 강남구 순서로 전해 드립니다. " +
                 "가는 길에 다른 지역에 들어서면 그 지역 소식도 이어서 전해 드립니다.",
             segments.first().text,
         )
@@ -165,16 +180,16 @@ class BriefingBuilderTest {
     @Test fun `route lines name the basis and the districts in order`() {
         val two = listOf(bundang, gangnam)
         assertEquals(
-            "저장된 집에서 회사까지 경로를 따라 성남시 분당구와 강남구 순서로 전해 드립니다.",
+            "저장된 집에서 회사까지 경로를 따라 성남 분당구와 서울 강남구 순서로 전해 드립니다.",
             BriefingBuilder.routeLine(RouteBasis.Saved("집 → 회사"), two),
         )
         assertEquals(
-            "저장된 주말 본가 경로에 있는 강남구 소식을 전해 드립니다.",
+            "저장된 주말 본가 경로에 있는 서울 강남구 소식을 전해 드립니다.",
             BriefingBuilder.routeLine(RouteBasis.Saved("주말 본가"), listOf(gangnam)),
         )
         assertTrue(
             BriefingBuilder.routeLine(RouteBasis.CurrentLocation, listOf(bundang))
-                .startsWith("내비게이션에 목적지가 없어 지금 계신 성남시 분당구 소식을 전해 드립니다."),
+                .startsWith("내비게이션에 목적지가 없어 지금 계신 성남 분당구 소식을 전해 드립니다."),
         )
         val many = listOf(
             bundang, Region("41131", "경기도", "성남시 수정구"), gangnam,
@@ -182,7 +197,7 @@ class BriefingBuilderTest {
         )
         assertTrue(
             BriefingBuilder.routeLine(RouteBasis.Demo, many)
-                .startsWith("시연 주행 경로를 따라 성남시 분당구, 성남시 수정구, 강남구 등 5개 지역을 차례로 전해 드립니다."),
+                .startsWith("시연 주행 경로를 따라 성남 분당구, 성남 수정구, 서울 강남구 등 5개 지역을 차례로 전해 드립니다."),
         )
     }
 }

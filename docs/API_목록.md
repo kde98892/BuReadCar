@@ -1,8 +1,8 @@
 # 부.읽.카 API 목록
 
-작성일: 2026-11-09
+작성일: 2026-11-09 · 갱신: 2026-11-15 (`feature/app-v1` 코드 기준)
 
-인증키는 이 문서에 적지 않는다. 프로젝트 루트의 `local.properties`에 아래 이름으로 넣는다. 이 파일은 git에 올리지 않는다.
+인증키 값은 이 문서에 적지 않는다. 프로젝트 루트의 `local.properties`에 아래 이름으로 넣으면 빌드할 때 `BuildConfig`로 들어간다. 심사 환경 재현을 위해 지금은 이 파일을 저장소에 포함했다. 앱이 API를 직접 부르므로 APK에도 키가 들어간다.
 
 | 키 이름 | 발급처 | 쓰는 API |
 | --- | --- | --- |
@@ -15,7 +15,7 @@
 
 ## 1. 앱에서 사용 중인 API
 
-상태 기준은 2026-11-09에 실제 호출에 성공했는지이다.
+상태 기준은 2026-11-09~14에 실제 호출에 성공했는지이다.
 
 ### 위치
 
@@ -24,22 +24,29 @@
 | 좌표 → 시군구, 법정동코드 | `https://api.vworld.kr/req/address` | `service=address`, `request=getAddress`, `version=2.0`, `crs=epsg:4326`, `point=경도,위도`, `format=json`, `type=PARCEL`, `key` | 호출 성공 |
 
 - 문서: [V-World 좌표를 주소로 변환](https://www.vworld.kr/dev/v4dv_geocoderguide2_s002.do)
-- 일일 요청은 무제한이지만 결과를 저장장치나 DB에 저장할 수 없다.
+- 일일 요청은 무제한이지만 결과를 저장장치나 DB에 저장할 수 없다. 그래서 결과를 캐시하지 않고, 경로의 좌표마다 동시에 호출한다.
 - `level4LC` 앞 5자리를 실거래가 API의 `LAWD_CD`로 쓴다.
 
 ### 실거래가·전월세 (공공데이터포털)
 
 | 카테고리 | 요청 URL | 파라미터 | 상태 |
 | --- | --- | --- | --- |
-| 실거래가·신고가 | `https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev` | `serviceKey`, `LAWD_CD`, `DEAL_YMD`(YYYYMM), `pageNo`, `numOfRows` | 호출 성공 |
+| 실거래가·신고가 | `https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev` | `serviceKey`, `LAWD_CD`, `DEAL_YMD`(YYYYMM), `pageNo`, `numOfRows=1000` | 호출 성공 |
 | 전월세 시세 | `https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent` | 위와 동일 | 호출 성공 |
+
+- 이번 달은 신고가 덜 들어와 읽지 않는다. 지난달(없으면 그 전달) 자료를 읽고, 그 전달 자료를 비교용으로 한 번 더 받는다. 비교용 자료를 못 받으면 비교만 뺀다.
 
 ### 분양·청약 (공공데이터포털)
 
 | 용도 | 요청 URL | 파라미터 | 상태 |
 | --- | --- | --- | --- |
-| 분양 공고 | `https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1/getAPTLttotPblancDetail` | `page`, `perPage`, `cond[SUBSCRPT_AREA_CODE_NM::EQ]`, `serviceKey` | 호출 성공 |
-| 청약 경쟁률 | `https://api.odcloud.kr/api/ApplyhomeInfoCmpetRtSvc/v1/getAPTLttotPblancCmpet` | `page`, `perPage`, `cond[HOUSE_MANAGE_NO::EQ]`, `serviceKey` | 호출 성공 |
+| 분양 공고 | `https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1/getAPTLttotPblancDetail` | `page`, `perPage=200`, `cond[SUBSCRPT_AREA_CODE_NM::EQ]`(시도 약칭, 예: 경기), `serviceKey` | 호출 성공 |
+| 주택형별 공급·분양가 | `https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1/getAPTLttotPblancMdl` | `page`, `perPage=100`, `cond[HOUSE_MANAGE_NO::EQ]`, `serviceKey` | 호출 성공 |
+| 청약 경쟁률 | `https://api.odcloud.kr/api/ApplyhomeInfoCmpetRtSvc/v1/getAPTLttotPblancCmpet` | `page`, `perPage=100`, `cond[HOUSE_MANAGE_NO::EQ]`, `serviceKey` | 호출 성공 |
+
+- 공고는 시도별로 받고 공급 주소(`HSSPLY_ADRES`)로 시군구를 거른다.
+- 주택형은 방송에서 읽을 공고(이번 주·다음 주 각 최대 2건)만 받는다. 실패하면 주택형 없이 읽는다.
+- 경쟁률은 이번 주·다음 주 공고가 없을 때, 최근 30일 안에 마감한 공고만 조회한다.
 
 - 데이터 안내: [청약 접수 경쟁률 조회 서비스](https://www.data.go.kr/data/15098905/openapi.do)
 
@@ -47,14 +54,19 @@
 
 | 용도 | 요청 URL | 파라미터 | 상태 |
 | --- | --- | --- | --- |
-| 지역 분류 목록 | `https://www.reb.or.kr/r-one/openapi/SttsApiTblItm.do` | `KEY`, `Type=json`, `pIndex`, `pSize`, `STATBL_ID=T244183132827305` | 호출 성공 |
-| 주간 매매가격지수 | `https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do` | `KEY`, `Type=json`, `pIndex`, `pSize`, `STATBL_ID=T244183132827305`, `DTACYCLE_CD=WK`, `CLS_ID`, `ITM_ID=10001`, `START_WRTTIME`, `END_WRTTIME` | 호출 성공 |
+| 지역 분류 목록 | `https://www.reb.or.kr/r-one/openapi/SttsApiTblItm.do` | `KEY`, `Type=json`, `pIndex=1`, `pSize=1000`, `STATBL_ID=T244183132827305` | 호출 성공 |
+| 주간 매매가격지수 | `https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do` | `KEY`, `Type=json`, `pIndex=1`, `pSize=20`, `STATBL_ID=T244183132827305`, `DTACYCLE_CD=WK`, `CLS_ID`, `ITM_ID=10001`, `START_WRTTIME`(8주 전), `END_WRTTIME`(이번 주, ISO 주 `YYYYWW`) | 호출 성공 |
+
+- 요청마다 5~8초 걸린다. 지역 분류 목록은 앱을 켤 때 한 번 받고, 지수는 시군구와 시도를 동시에 요청해 1시간 동안 다시 쓴다.
+- `CLS_ID`는 분류 전체 이름(예: `경기>성남시>분당구`)을 V-World 시군구 이름과 맞춰 찾는다.
 
 - 문서: [개발가이드](https://www.reb.or.kr/r-one/portal/openapi/openApiDevPage.do), [통계코드 검색](https://www.reb.or.kr/r-one/portal/openapi/openApiGuideCdPage.do)
 
 ### 금리·대출 (한국은행 ECOS)
 
 요청 형식: `https://ecos.bok.or.kr/api/StatisticSearch/{KEY}/json/kr/{시작}/{끝}/{통계코드}/M/{YYYYMM}/{YYYYMM}/{항목코드}`
+
+앱은 `1/24`행, 6개월 전부터 이번 달까지를 요청한다.
 
 | 항목 | 통계코드 | 항목코드 | 상태 |
 | --- | --- | --- | --- |
@@ -69,9 +81,11 @@
 | --- | --- | --- | --- |
 | 보도자료 목록 (제목, 분야, 등록일) | `https://www.molit.go.kr/USR/NEWS/m_71/lst.jsp` | `lcmspage` (1쪽에 10건) | 호출 성공 |
 | 최신 보도자료 10건 (목록을 못 읽을 때) | `https://www.molit.go.kr/dev/board/board_rss.jsp?rss_id=NEWS` | 없음 | 호출 성공 |
+| 상세 페이지 (첨부 hwpx 경로 찾기) | `https://www.molit.go.kr/USR/NEWS/m_71/dtl.jsp` | `id` | 호출 성공 |
+| 첨부 내려받기 | `https://www.molit.go.kr/portal/common/download/DownloadMltm2.jsp` | `FilePath`, `FileName` | 호출 성공 |
 
 - 최근 31일 글을 최대 10쪽까지 읽고 1시간 동안 다시 쓴다. 앱을 켜면 미리 받아 둔다.
-- 본문: 방송에서 읽는 글만 상세 페이지(`dtl.jsp?id=`)에서 첨부한 보도자료 hwpx를 받아 `Contents/section0.xml`의 "□" 문단 첫 문장을 최대 3개 읽는다. 받지 못하면 제목만 읽는다. 한 문서는 20MB까지만 받는다.
+- 본문: 방송에서 읽는 글만 상세 페이지(`dtl.jsp?id=`)에서 첨부한 보도자료 hwpx를 받아 `Contents/section0.xml`의 "□" 문단 첫 문장을 최대 3개 읽는다. 받지 못하면 제목만 읽는다. 한 문서는 20MB까지만 받고, 받은 본문은 앱이 켜져 있는 동안 다시 쓴다.
 - 저작권: 국토교통부 보도자료 저작물은 공공누리 공공저작물 자유이용허락에 따라 누구나 이용할 수 있다.
 - 인증서: `*.molit.go.kr`은 OISTE WISeKey Global Root GB CA 체인이다. Android 14 시스템 인증서 저장소(`dfc0fe80.0`)에 있다.
 
@@ -96,9 +110,10 @@
 
 | API | 의존성 또는 진입점 | 권한 | 문서 |
 | --- | --- | --- | --- |
-| Pleos NaviHelper | `ai.pleos.playground:NaviHelper:3.0.5` | `pleos.car.permission.NAVI_ROUTE` | [NaviHelper](https://document.pleos.ai/en/api-reference/connect-sdk-pleos/NaviHelper/intro) |
+| Pleos NaviHelper (현재 위치, 목적지, 경유지, 최근 목적지, 즐겨찾기, 안내 이벤트) | `ai.pleos.playground:NaviHelper:3.0.5` | `pleos.car.permission.NAVI_ROUTE` | [NaviHelper](https://document.pleos.ai/en/api-reference/connect-sdk-pleos/NaviHelper/intro) |
 | Pleos TextToSpeech | `ai.pleos.playground:TextToSpeech:3.3.1`, `Mode.ON_DEVICE` | `pleos.car.permission.TTS_SERVICE` | [TextToSpeech](https://document.pleos.ai/docs/pleos-only/connect-sdk-pleos/TextToSpeech/intro) |
 | AAOS CarUxRestrictions | `android.car`, `CarUxRestrictionsManager` | 없음 | [주행 규제 개발 가이드](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/driving-restriction-development-guide) |
-| Android 오디오 포커스 | `AudioManager`, `AudioFocusRequest` | 없음 | [오디오 포커스 개발 가이드](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/audio-focus-development-guide/audio-focus-development) |
+| AAOS 전원 정책 | `android.car`, `CarPowerManager` (오디오 전원) | `android.car.permission.READ_CAR_POWER_POLICY` | - |
+| Android 오디오 포커스 | `AudioManager`, `AudioFocusRequest` (`AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, `USAGE_MEDIA`) | 없음 | [오디오 포커스 개발 가이드](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/audio-focus-development-guide/audio-focus-development) |
 
 Maven 저장소: `https://nexus-playground.pleos.ai/repository/maven-releases/`
