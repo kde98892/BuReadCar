@@ -68,8 +68,10 @@ internal fun SettingsScreen(ui: RadioState, viewModel: RadioViewModel, wide: Boo
                 Text("데이터 출처", style = PleosType.BodyLStrong, color = c.ink)
                 listOf(
                     "국토교통부 실거래가 · 전월세 (공공데이터포털)",
-                    "한국부동산원 R-ONE 주택가격지수",
-                    "한국은행 ECOS 금리 · 청약홈 분양정보",
+                    "국토교통부 보도자료 (교통 · 개발 · 재건축 · 정책 · 미분양)",
+                    "한국부동산원 청약홈 분양정보 · R-ONE 주택가격지수",
+                    "한국은행 ECOS 금리",
+                    "V-World 지역 확인",
                 ).forEach { Text(it, style = PleosType.LabelM, color = c.sub) }
                 Text("참고용 정보이며 투자 권유가 아닙니다.", style = PleosType.LabelMStrong, color = c.faint)
             }
