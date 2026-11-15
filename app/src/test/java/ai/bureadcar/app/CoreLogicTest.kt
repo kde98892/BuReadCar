@@ -171,7 +171,7 @@ class CoreLogicTest {
             mapOf("dealAmount" to "230,000", "aptNm" to "상록마을(라이프1차)", "umdNm" to "정자동", "cdealType" to "", "excluUseAr" to "128.7"),
         )
         assertEquals(
-            "성남시 분당구의 9월 아파트 매매는 지금까지 1건 신고됐습니다. 계약을 해제했다는 신고도 1건 있었습니다. " +
+            "성남 분당구의 9월 아파트 매매는 지금까지 1건 신고됐습니다. 계약을 해제했다는 신고도 1건 있었습니다. " +
                 "가장 높은 거래는 정자동 상록마을 라이프1차 전용 128제곱미터로, 23억 원입니다.",
             Scripts.trade(bundang, 9, rows),
         )
@@ -236,7 +236,7 @@ class CoreLogicTest {
         val text = Scripts.trade(bundang, 10, october, september)!!
         assertTrue(text, text.endsWith("제곱미터당 평균 거래가는 9월보다 10퍼센트 상승했습니다."))
         assertEquals(
-            "성남시 분당구 아파트의 10월 제곱미터당 평균 거래가는 전월보다 10퍼센트 상승했습니다.",
+            "성남 분당구 아파트의 10월 제곱미터당 평균 거래가는 전월보다 10퍼센트 상승했습니다.",
             Scripts.tradeHighlight(bundang, 10, october, september),
         )
     }
@@ -244,7 +244,17 @@ class CoreLogicTest {
     @Test fun `too few deals skip the comparison`() {
         val text = Scripts.trade(bundang, 10, List(5) { deal(110_000, 100.0) }, List(2) { deal(100_000, 100.0) })!!
         assertTrue(text, "평균" !in text)
-        assertTrue(Scripts.tradeHighlight(bundang, 10, List(1) { deal(110_000, 100.0) })!!.startsWith("성남시 분당구의 10월 최고 거래는"))
+        assertTrue(Scripts.tradeHighlight(bundang, 10, List(1) { deal(110_000, 100.0) })!!.startsWith("성남 분당구의 10월 최고 거래는"))
+    }
+
+    @Test fun `district names carry the city in metropolitan cities and drop 시 before a 구`() {
+        assertEquals("서울 강남구", gangnam.displayName)
+        assertEquals("부산 해운대구", Region("26350", "부산광역시", "해운대구").displayName)
+        assertEquals("성남 분당구", bundang.displayName)
+        assertEquals("하남시", Region("41450", "경기도", "하남시").displayName)
+        assertEquals("세종", Region("36110", "세종특별자치시", "세종특별자치시").displayName)
+        // API lookups keep the raw name.
+        assertEquals("성남시 분당구", bundang.sigungu)
     }
 
     @Test fun `rent compares jeonse deposits with the previous month`() {

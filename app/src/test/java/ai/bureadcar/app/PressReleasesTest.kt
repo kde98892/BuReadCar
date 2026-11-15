@@ -106,7 +106,7 @@ class PressReleasesTest {
         assertEquals(1, news.size)
         assertEquals(goyang, news[0].region)
         assertTrue(news[0].text, news[0].text.startsWith("11월 12일, 김용석"))
-        assertEquals("고양시 덕양구에서는 김용석 대광위원장, 고양창릉 광역교통개선대책 추진상황 점검 소식이 있었습니다.", news[0].highlight)
+        assertEquals("고양 덕양구에서는 김용석 대광위원장, 고양창릉 광역교통개선대책 추진상황 점검 소식이 있었습니다.", news[0].highlight)
     }
 
     @Test fun `province mentions count as route news`() {
