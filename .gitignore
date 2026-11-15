@@ -1,2 +1,7 @@
 local.properties
 git_ignore/
+.gradle/
+build/
+.kotlin/
+.idea/
+.DS_Store

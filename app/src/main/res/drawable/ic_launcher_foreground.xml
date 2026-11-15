@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A house with sound waves: real estate, read aloud. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,55 L47,35 L70,55 L64,55 L64,76 L30,76 L30,55 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="5"
+        android:pathData="M74,46 Q81,55 74,64" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="5"
+        android:pathData="M82,38 Q95,55 82,72" />
+</vector>
