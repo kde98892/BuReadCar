@@ -37,6 +37,112 @@
 - 플랫폼의 주행 제한에 따라 편성·설정 조작과 대본 표시를 제한합니다.
 - 가로·세로 화면과 내비 옆 분할 화면에 대응합니다.
 
+## 📱 페이지별 기능
+
+### 1. 홈
+
+<table>
+  <tbody>
+    <tr>
+      <td align="center"><sub><b>평일</b></sub><br><img width="400" src="docs/images/home_weekday.png" alt="평일 홈 화면" /></td>
+      <td align="center"><sub><b>주말</b></sub><br><img width="400" src="docs/images/home_weekend.png" alt="주말 홈 화면" /></td>
+    </tr>
+  </tbody>
+</table>
+
+- 오늘 요일에 편성된 1부·2부 카테고리를 카드로 보여 줍니다.
+- **[ 오늘 방송 듣기 ]** 버튼을 눌러 지금 경로 기준의 방송을 바로 시작할 수 있습니다.
+- 하단의 주간 편성 줄에서 월~금 편성을 한눈에 확인할 수 있고, 누르면 편성표로 이동합니다.
+- 주말에는 편성이 없으며, 카테고리 10개 중 듣고 싶은 소식을 골라 바로 들을 수 있습니다.
+- **[ 시연 주행 ]** 버튼으로 실제로 이동하지 않아도 지역이 바뀌며 소식이 추가되는 방송을 확인할 수 있습니다.
+- 처음 방송을 시작할 때 위치 정보 이용에 대한 동의를 받습니다.
+
+### 2. 편성표
+
+<table>
+  <tbody>
+    <tr>
+      <td align="center"><sub><b>이번 주 편성표</b></sub><br><img width="400" src="docs/images/schedule.png" alt="편성표 화면" /></td>
+      <td align="center"><sub><b>드래그 앤 드롭으로 편성 바꾸기</b></sub><br><img width="400" src="docs/images/schedule_drag.gif" alt="편성표 드래그 앤 드롭" /></td>
+    </tr>
+  </tbody>
+</table>
+
+- 월~금 요일마다 1부·2부 두 칸에 듣고 싶은 카테고리를 직접 지정할 수 있습니다.
+- 하단의 소식 박스를 드래그 앤 드롭으로 원하는 칸에 놓아 편성합니다.
+- 칸끼리 끌어 놓으면 서로 자리를 바꾸고, 칸 밖으로 끌어내면 편성에서 뺄 수 있습니다.
+- 같은 요일에 같은 카테고리는 중복으로 넣을 수 없습니다.
+- 바꾼 편성은 기기에 저장되고, 홈 화면의 오늘 방송에 바로 반영됩니다.
+
+### 3. 내비 연동 · 자동 재생
+
+<table>
+  <tbody>
+    <tr>
+      <td align="center"><sub><b>내비 목적지 설정</b></sub><br><img width="400" src="docs/images/navi_route.png" alt="내비 목적지 설정 화면" /></td>
+      <td align="center"><sub><b>내비 옆 분할 화면</b></sub><br><img width="400" src="docs/images/broadcast_split.png" alt="내비 옆 분할 화면에서 재생 중인 방송" /></td>
+    </tr>
+  </tbody>
+</table>
+
+- Pleos 내비게이션의 현재 위치·경유지·목적지를 받아 소식을 전할 시군구를 정합니다.
+- 내비 길 안내가 시작되면 별도 조작 없이 방송이 자동으로 재생됩니다.
+- 안내 음성처럼 다른 오디오가 나오고 있으면 최대 30초 기다렸다가 방송을 시작합니다.
+- 내비 옆 분할 화면에서도 방송 화면을 함께 띄워 둘 수 있습니다.
+
+### 4. 방송 화면
+
+<table>
+  <tbody>
+    <tr>
+      <td align="center"><sub><b>방송 중</b></sub><br><img width="400" src="docs/images/broadcast.png" alt="전체 화면 방송 화면" /></td>
+      <td align="center"><sub><b>같은 지역의 2부</b></sub><br><img width="400" src="docs/images/broadcast_trade.png" alt="실거래가 소식을 읽는 방송 화면" /></td>
+      <td align="center"><sub><b>새 소식이 없는 지역</b></sub><br><img width="400" src="docs/images/broadcast_no_news.png" alt="새 소식이 없음을 안내하는 방송 화면" /></td>
+    </tr>
+  </tbody>
+</table>
+
+- 방송을 시작할 때 오늘의 카테고리, 경로 기준, 소식을 전할 지역 순서를 먼저 안내합니다.
+- 지역별로 1부와 2부 소식을 묶어 경로 순서대로 전합니다.
+- 화면에는 지금 읽는 문장, 1부·2부와 카테고리, 경로 지역 중 지금 듣는 지역이 표시됩니다.
+- 주행 중 새로운 지역에 들어서면 그 지역 소식이 방송에 자동으로 추가됩니다.
+- 경로 지역에 소식이 없으면 시도·전국 소식으로 대신 전하고, 새 소식이 없거나 불러오지 못한 카테고리는 그 사유를 짧게 안내합니다.
+- **[ 처음부터 ]**, **[ 재생 / 일시정지 ]**, **[ 다음 ]** 버튼과 상단의 **[ 끝내기 ]** 버튼으로 방송을 조작할 수 있습니다.
+- 내비 안내 음성이 나오면 방송을 멈췄다가, 안내가 끝나면 그 문장 처음부터 다시 읽습니다.
+- 주행 중에는 플랫폼의 주행 제한에 따라 문장 표시를 숨기고 소리로만 전합니다.
+
+### 5. 오늘의 핵심 · 방송 종료
+
+<table>
+  <tbody>
+    <tr>
+      <td align="center"><sub><b>오늘의 핵심</b></sub><br><img width="400" src="docs/images/broadcast_summary.png" alt="오늘의 핵심을 정리하는 방송 화면" /></td>
+      <td align="center"><sub><b>방송 완료</b></sub><br><img width="400" src="docs/images/home_done.png" alt="방송을 모두 들은 뒤의 홈 화면" /></td>
+    </tr>
+  </tbody>
+</table>
+
+- 방송 마지막에 '오늘의 핵심'으로 카테고리별 요점을 한 문장씩 다시 정리합니다.
+- 남은 주행 시간에 맞춰 소식 분량을 조절해 도착 전에 방송을 마칩니다.
+- 목적지에 도착하면 지금 읽는 문장까지 마치고 멈춥니다.
+- 방송이 끝나면 홈 화면에 "오늘 방송을 모두 들었어요"를 표시합니다.
+
+### 6. 설정
+
+<table>
+  <tbody>
+    <tr>
+      <td align="center"><sub><b>설정</b></sub><br><img width="400" src="docs/images/settings.png" alt="설정 화면" /></td>
+    </tr>
+  </tbody>
+</table>
+
+- 소식을 들을 지역 기준을 **[ 내 경로 지역 ]** 또는 **[ 저장된 경로 ]** 중에서 고를 수 있습니다.
+- 저장된 경로는 내비 즐겨찾기의 집·회사로 자동으로 만들어지며, 예시 경로도 함께 제공합니다.
+- 내비 안내가 시작되면 자동으로 듣는 기능을 켜고 끌 수 있습니다.
+- 데이터 출처와 "참고용 정보이며 투자 권유가 아닙니다" 안내를 확인할 수 있습니다.
+- 주행 중에는 편성표와 설정을 열 수 없습니다.
+
 ## 🗓️ 소식 카테고리
 
 매일 같은 정보를 반복하기보다, 요일마다 다른 주제를 들을 수 있도록 구성했습니다.
@@ -116,8 +222,8 @@ Pleos 내비·TTS 서비스가 있는 환경을 사용합니다. 일반 Android 
 
 ## 🔑 API 키 설정
 
-프로젝트 루트의 `local.properties`에 키를 작성합니다. (현재 심사를 위해 개인 프로젝트용 개발계 API Key가 코드에 포함되어 있습니다.)
-Android Studio가 생성한 `sdk.dir` 항목은 유지합니다.
+프로젝트 루트의 `api.properties`에 키를 작성합니다. (현재 심사를 위해 개인 프로젝트용 개발계 API Key가 저장소에 포함되어 있습니다.)
+`sdk.dir`은 Android Studio가 각자 PC에 만드는 `local.properties`에 그대로 둡니다.
 
 ```properties
 RONE_API_KEY=
@@ -163,7 +269,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 시연 주행은 실제 내비 위치 갱신이나 실차 주행을 검증하는 기능은 아닙니다.
 
-> 촬영을 위해 현재 `RadioViewModel.kt`의 `BROADCAST_DAY`가 월요일로 고정돼 있습니다. 실제 요일을 사용하려면 `null`로 변경합니다.
+> 앱은 실제 요일을 따릅니다. 촬영 등을 위해 특정 요일로 고정하려면 `RadioViewModel.kt`의 `BROADCAST_DAY`에 요일(예: `DayOfWeek.MONDAY`)을 지정합니다.
 
 ## 📌 현재 동작 범위
 
