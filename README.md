@@ -6,7 +6,9 @@
 
 ## API 키
 
-키는 프로젝트 루트의 `local.properties`에 넣습니다. 이 파일은 git에 올리지 않습니다.
+API 키는 프로젝트 루트의 `api.properties`에 넣습니다. 심사용 키 공유를 위해 이 파일은 저장소에 포함합니다.
+
+PC별 Android SDK 경로(`sdk.dir`)는 `local.properties`에 설정합니다. 이 파일은 Git에서 제외하며, Android Studio에서 각 PC의 SDK 경로를 설정해 주세요.
 
 ```properties
 RONE_API_KEY=
