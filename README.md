@@ -223,6 +223,8 @@ Pleos 온디바이스 TTS 재생
 | Android SDK | compileSdk 35 · targetSdk 34 · minSdk 28 |
 | 내비 연동 | NaviHelper SDK 3.0.5 |
 | 음성 재생 | TextToSpeech SDK 3.3.1 |
+| 테스트 에뮬레이터 | Pleos Connect v2.1.0 |
+| 화면 규격 | 2560 × 1440 |
 
 Pleos 내비·TTS 서비스가 있는 환경을 사용합니다. 일반 Android 기기에서는 해당 서비스의 동작을 보장하지 않습니다.
 
