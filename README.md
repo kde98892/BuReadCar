@@ -12,6 +12,12 @@
 
 ---
 
+## 📦 APK 다운로드
+
+[설치용 release APK 다운로드](https://github.com/kde98892/BuReadCar/releases/tag/v1.0.0)
+
+---
+
 ## 🎥 시연 영상
 
 [▶️ 부.읽.카 시연 영상 보기](https://www.youtube.com/watch?v=cvXl-8FaM3E)
