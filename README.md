@@ -222,8 +222,8 @@ Pleos 내비·TTS 서비스가 있는 환경을 사용합니다. 일반 Android 
 
 ## 🔑 API 키 설정
 
-프로젝트 루트의 `local.properties`에 키를 작성합니다. (현재 심사를 위해 개인 프로젝트용 개발계 API Key가 코드에 포함되어 있습니다.)
-Android Studio가 생성한 `sdk.dir` 항목은 유지합니다.
+프로젝트 루트의 `api.properties`에 키를 작성합니다. (현재 심사를 위해 개인 프로젝트용 개발계 API Key가 저장소에 포함되어 있습니다.)
+`sdk.dir`은 Android Studio가 각자 PC에 만드는 `local.properties`에 그대로 둡니다.
 
 ```properties
 RONE_API_KEY=
@@ -269,7 +269,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 시연 주행은 실제 내비 위치 갱신이나 실차 주행을 검증하는 기능은 아닙니다.
 
-> 촬영을 위해 현재 `RadioViewModel.kt`의 `BROADCAST_DAY`가 월요일로 고정돼 있습니다. 실제 요일을 사용하려면 `null`로 변경합니다.
+> 앱은 실제 요일을 따릅니다. 촬영 등을 위해 특정 요일로 고정하려면 `RadioViewModel.kt`의 `BROADCAST_DAY`에 요일(예: `DayOfWeek.MONDAY`)을 지정합니다.
 
 ## 📌 현재 동작 범위
 
