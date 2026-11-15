@@ -53,10 +53,10 @@ data class RadioState(
 )
 
 /**
- * The weekday the app presents as today. Pinned to Monday so the weekday screen and lineup can be
- * filmed on any day; set to null to follow the calendar again.
+ * The weekday the app presents as today; null follows the calendar. Set a day (e.g. MONDAY) to film
+ * that day's screen and lineup on any day.
  */
-private val BROADCAST_DAY: DayOfWeek? = DayOfWeek.MONDAY
+private val BROADCAST_DAY: DayOfWeek? = null
 
 private data class Trip(val points: List<Place>, val remainSeconds: Int?, val basis: RouteBasis)
 
